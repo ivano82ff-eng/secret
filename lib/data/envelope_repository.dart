@@ -43,12 +43,6 @@ class EnvelopeRepository {
     return rows.map(_map).toList();
   }
 
-  Stream<List<Envelope>> watchAll() {
-    final query = _db.select(_db.storedEnvelopes)
-      ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]);
-    return query.watch().map((rows) => rows.map(_map).toList());
-  }
-
   Envelope _map(StoredEnvelope row) {
     return Envelope(
       id: row.id,

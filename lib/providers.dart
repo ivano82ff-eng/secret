@@ -127,17 +127,6 @@ class ChatListNotifier extends AsyncNotifier<List<ChatSummary>> {
     if (ref.watch(seedDemoProvider)) {
       await ref.read(demoSeederProvider).seedIfEmpty();
     }
-
-    var disposed = false;
-    final subscription = repository.watchAll().listen((rows) {
-      scheduleMicrotask(() {
-        if (!disposed) state = AsyncData(summarize(rows));
-      });
-    });
-    ref.onDispose(() {
-      disposed = true;
-      subscription.cancel();
-    });
     return summarize(await repository.listAll());
   }
 }
@@ -183,15 +172,6 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     }
     final repository = ref.watch(envelopeRepositoryProvider);
     final cipher = ref.watch(sessionCipherProvider);
-
-    var disposed = false;
-    final subscription = repository.watchAll().listen((rows) {
-      unawaited(_publish(rows, cipher, () => disposed));
-    });
-    ref.onDispose(() {
-      disposed = true;
-      subscription.cancel();
-    });
     return _decode(await repository.listAll(), cipher);
   }
 
@@ -218,15 +198,8 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     if (reply != null) {
       await repository.insert(reply);
     }
-  }
-
-  Future<void> _publish(
-    List<Envelope> rows,
-    SessionCipher cipher,
-    bool Function() disposed,
-  ) async {
-    final messages = await _decode(rows, cipher);
-    if (!disposed()) state = AsyncData(messages);
+    state = AsyncData(await _decode(await repository.listAll(), cipher));
+    ref.invalidate(chatListProvider);
   }
 
   Future<List<DisplayMessage>> _decode(

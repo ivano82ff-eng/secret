@@ -53,6 +53,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
       children: [
         Expanded(
           child: thread.when(
+            skipLoadingOnReload: true,
             loading: () => const StatusPanel(
               icon: Icons.hourglass_top,
               title: 'Открываем диалог',

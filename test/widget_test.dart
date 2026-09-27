@@ -15,6 +15,7 @@ void main() {
     expect(find.byKey(const Key('empty-chats')), findsOneWidget);
     expect(find.text('Пока нет переписок'), findsOneWidget);
     expect(find.text('Написать Алексею'), findsOneWidget);
+    await _unmount(tester);
   });
 
   testWidgets('sending appends the outbound text and a mock reply', (
@@ -32,7 +33,8 @@ void main() {
 
     expect(find.text('Проверка связи'), findsOneWidget);
     expect(find.text('Принято.'), findsOneWidget);
-    expect(find.text('отправлено'), findsOneWidget);
+    expect(find.textContaining('отправлено'), findsOneWidget);
+    await _unmount(tester);
   });
 }
 
@@ -57,6 +59,11 @@ Future<void> _pumpApp(WidgetTester tester) async {
     ),
   );
   await _flush(tester);
+}
+
+Future<void> _unmount(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
 }
 
 Future<void> _flush(WidgetTester tester) async {

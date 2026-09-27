@@ -16,6 +16,7 @@ class ChatListBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chats = ref.watch(chatListProvider);
     return chats.when(
+      skipLoadingOnReload: true,
       loading: () => const StatusPanel(
         icon: Icons.hourglass_top,
         title: 'Загружаем переписки',

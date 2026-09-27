@@ -1,11 +1,11 @@
 {
-    "name": "secret",
-    "short_name": "secret",
+    "name": "Секрет",
+    "short_name": "Секрет",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "Offline E2EE messenger client with a mock transport.",
+    "background_color": "#F6F3EC",
+    "theme_color": "#1B3A31",
+    "description": "Офлайн-клиент мессенджера. На сервер уходят только конверты.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
