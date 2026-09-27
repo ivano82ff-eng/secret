@@ -158,7 +158,7 @@ class MockMessengerTransport implements MessengerTransport {
 
   String _newId() {
     final now = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
-    final salt = _random.nextInt(1 << 32).toRadixString(16);
+    final salt = _random.nextInt(1 << 30).toRadixString(16);
     return 'env_${now}_$salt';
   }
 

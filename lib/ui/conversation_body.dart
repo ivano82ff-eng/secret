@@ -35,7 +35,8 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
     _controller.clear();
     try {
       await ref.read(threadProvider(widget.chatId).notifier).send(text);
-    } catch (_) {
+    } catch (error) {
+      debugPrint('send failed (${error.runtimeType})');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Не удалось отправить сообщение.')),

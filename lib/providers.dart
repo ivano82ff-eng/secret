@@ -236,7 +236,7 @@ Future<String> _mockDisplayText(SessionCipher cipher, Envelope envelope) async {
 
 String _newId() {
   final now = DateTime.now().microsecondsSinceEpoch.toRadixString(16);
-  final salt = Random.secure().nextInt(1 << 32).toRadixString(16);
+  final salt = Random.secure().nextInt(1 << 30).toRadixString(16);
   return 'env_${now}_$salt';
 }
 
