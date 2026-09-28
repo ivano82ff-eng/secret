@@ -36,6 +36,10 @@ class SecretPalette extends ThemeExtension<SecretPalette> {
   final Color quiet;
   final Color field;
 
+  /// Opaque column behind chat names. Darker than the thread wallpaper.
+  Color get listSurface =>
+      night ? const Color(0xFF070C10) : const Color(0xFFB7C2BC);
+
   static SecretPalette of(BuildContext context) {
     return Theme.of(context).extension<SecretPalette>()!;
   }

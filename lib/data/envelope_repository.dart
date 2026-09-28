@@ -36,6 +36,22 @@ class EnvelopeRepository {
         .write(StoredEnvelopesCompanion(status: Value(status.name)));
   }
 
+  Future<void> updateCiphertext(String id, String ciphertext) {
+    return (_db.update(_db.storedEnvelopes)..where((row) => row.id.equals(id)))
+        .write(StoredEnvelopesCompanion(ciphertext: Value(ciphertext)));
+  }
+
+  Future<void> deleteById(String id) {
+    return (_db.delete(_db.storedEnvelopes)..where((row) => row.id.equals(id)))
+        .go();
+  }
+
+  Future<void> deleteChat(String chatId) {
+    return (_db.delete(
+      _db.storedEnvelopes,
+    )..where((row) => row.chatId.equals(chatId))).go();
+  }
+
   Future<List<Envelope>> listAll() async {
     final rows = await (_db.select(
       _db.storedEnvelopes,

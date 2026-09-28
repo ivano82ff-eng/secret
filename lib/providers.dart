@@ -145,6 +145,28 @@ class SelectedChat extends Notifier<String?> {
   String? build() => null;
 
   void select(String chatId) => state = chatId;
+
+  void clear() => state = null;
+}
+
+class DisplayNames extends Notifier<Map<String, String>> {
+  @override
+  Map<String, String> build() => const {};
+
+  void rename(String chatId, String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    state = {...state, chatId: trimmed};
+  }
+}
+
+final displayNamesProvider =
+    NotifierProvider<DisplayNames, Map<String, String>>(DisplayNames.new);
+
+String displayTitle(String chatId, Map<String, String> names) {
+  final override = names[chatId];
+  if (override != null && override.isNotEmpty) return override;
+  return peerByChatIdOrNull(chatId)?.name ?? 'Собеседник';
 }
 
 final selectedChatProvider = NotifierProvider<SelectedChat, String?>(
@@ -155,6 +177,7 @@ class ChatListNotifier extends AsyncNotifier<List<ChatSummary>> {
   @override
   Future<List<ChatSummary>> build() async {
     final preview = ref.watch(previewModeProvider);
+    final names = ref.watch(displayNamesProvider);
     if (preview == PreviewMode.loading) {
       await Completer<void>().future;
     }
@@ -169,7 +192,16 @@ class ChatListNotifier extends AsyncNotifier<List<ChatSummary>> {
     if (ref.watch(seedDemoProvider)) {
       await ref.read(demoSeederProvider).seedIfEmpty();
     }
-    return summarize(await repository.listAll());
+    return summarize(await repository.listAll(), names);
+  }
+
+  Future<void> deleteChat(String chatId) async {
+    await ref.read(envelopeRepositoryProvider).deleteChat(chatId);
+    if (ref.read(selectedChatProvider) == chatId) {
+      ref.read(selectedChatProvider.notifier).clear();
+    }
+    ref.read(openThreadProvider.notifier).clearIf(chatId);
+    ref.invalidateSelf();
   }
 }
 
@@ -178,7 +210,10 @@ final chatListProvider =
       ChatListNotifier.new,
     );
 
-List<ChatSummary> summarize(List<Envelope> envelopes) {
+List<ChatSummary> summarize(
+  List<Envelope> envelopes,
+  Map<String, String> names,
+) {
   final latest = <String, Envelope>{};
   for (final envelope in envelopes) {
     final current = latest[envelope.chatId];
@@ -188,11 +223,10 @@ List<ChatSummary> summarize(List<Envelope> envelopes) {
   }
   final summaries = <ChatSummary>[];
   for (final envelope in latest.values) {
-    final peer = peerByChatIdOrNull(envelope.chatId);
     summaries.add(
       ChatSummary(
         chatId: envelope.chatId,
-        title: peer?.name ?? 'Собеседник',
+        title: displayTitle(envelope.chatId, names),
         updatedAt: envelope.createdAt,
         preview: neutralPreview,
       ),
@@ -281,6 +315,52 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     ref.invalidate(chatListProvider);
   }
 
+  Future<void> editMessage(String id, String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final repository = ref.read(envelopeRepositoryProvider);
+    final cipher = ref.read(sessionCipherProvider);
+    final encrypted = await cipher.encrypt(
+      Uint8List.fromList(utf8.encode(trimmed)),
+    );
+    await repository.updateCiphertext(id, base64Encode(encrypted));
+    ref.read(localMediaProvider.notifier).remove(id);
+    state = AsyncData(await _decode(await repository.listAll(), cipher));
+  }
+
+  Future<void> deleteMessage(String id) async {
+    final repository = ref.read(envelopeRepositoryProvider);
+    final cipher = ref.read(sessionCipherProvider);
+    await repository.deleteById(id);
+    ref.read(localMediaProvider.notifier).remove(id);
+    state = AsyncData(await _decode(await repository.listAll(), cipher));
+    ref.invalidate(chatListProvider);
+  }
+
+  Future<void> forwardTo(DisplayMessage message, String targetChatId) async {
+    if (targetChatId == chatId) return;
+    final repository = ref.read(envelopeRepositoryProvider);
+    final cipher = ref.read(sessionCipherProvider);
+    final encrypted = await cipher.encrypt(
+      Uint8List.fromList(utf8.encode(_payloadOf(message))),
+    );
+    final copy = Envelope(
+      id: _newId(),
+      chatId: targetChatId,
+      sender: localUserId,
+      createdAt: DateTime.now().toUtc(),
+      ciphertext: base64Encode(encrypted),
+      status: EnvelopeStatus.sent,
+    );
+    final media = ref.read(localMediaProvider)[message.envelope.id];
+    if (media != null) {
+      ref.read(localMediaProvider.notifier).put(copy.id, media);
+    }
+    await repository.insert(copy);
+    ref.invalidate(chatListProvider);
+    ref.invalidate(threadProvider(targetChatId));
+  }
+
   Future<List<DisplayMessage>> _decode(
     List<Envelope> rows,
     SessionCipher cipher,
@@ -333,6 +413,15 @@ DisplayMessage _toDisplay(
   return DisplayMessage(envelope: envelope, mockDisplayText: plain);
 }
 
+String _payloadOf(DisplayMessage message) {
+  return switch (message.kind) {
+    MockKind.wallSmiley => wallSmileyPayload,
+    MockKind.file => filePayload,
+    MockKind.voice => voicePayload,
+    MockKind.text => message.mockDisplayText,
+  };
+}
+
 class InboundHub extends Notifier<int> {
   @override
   int build() => 0;
@@ -379,7 +468,7 @@ class InboundHub extends Notifier<int> {
   void _consider(Envelope envelope) {
     if (envelope.sender == localUserId) return;
     if (envelope.chatId == ref.read(openThreadProvider)) return;
-    final name = peerByChatIdOrNull(envelope.chatId)?.name ?? 'Собеседник';
+    final name = displayTitle(envelope.chatId, ref.read(displayNamesProvider));
     ref
         .read(noticeProvider.notifier)
         .show(InboundNotice(chatId: envelope.chatId, senderName: name));

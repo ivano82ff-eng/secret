@@ -22,15 +22,35 @@ class ConversationBody extends ConsumerStatefulWidget {
 
 class _ConversationBodyState extends ConsumerState<ConversationBody> {
   final _controller = TextEditingController();
+  final _focus = FocusNode();
   var _sending = false;
   var _pickerOpen = false;
   var _recording = false;
   String? _micError;
 
   @override
+  void didUpdateWidget(ConversationBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chatId == widget.chatId) return;
+    _pickerOpen = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
+  }
+
+  void _quote(String snippet) {
+    _controller.value = TextEditingValue(
+      text: snippet,
+      selection: TextSelection.collapsed(offset: snippet.length),
+    );
+    _focus.requestFocus();
   }
 
   Future<void> _send() async {
@@ -172,7 +192,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
                     itemCount: messages.length,
                     itemBuilder: (context, index) {
                       final message = messages[messages.length - 1 - index];
-                      return MessageBubble(message: message);
+                      return MessageBubble(message: message, onQuote: _quote);
                     },
                   );
                 },
@@ -183,7 +203,11 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
         if (_pickerOpen)
           Divider(height: 1, color: palette.quiet.withValues(alpha: 0.2)),
         if (_pickerOpen)
-          _EmojiPanel(controller: _controller, onSmiley: _sendSmiley),
+          _EmojiPanel(
+            key: const Key('emoji-panel'),
+            controller: _controller,
+            onSmiley: _sendSmiley,
+          ),
         Divider(height: 1, color: palette.quiet.withValues(alpha: 0.2)),
         Material(
           color: palette.composer,
@@ -229,6 +253,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
                         child: TextField(
                           key: const Key('composer'),
                           controller: _controller,
+                          focusNode: _focus,
                           minLines: 1,
                           maxLines: 4,
                           textInputAction: TextInputAction.send,
@@ -297,14 +322,31 @@ List<CategoryEmoji> _compactEmojiSet(Locale locale) {
   ];
 }
 
-class _EmojiPanel extends StatelessWidget {
-  const _EmojiPanel({required this.controller, required this.onSmiley});
+class _EmojiPanel extends StatefulWidget {
+  const _EmojiPanel({
+    super.key,
+    required this.controller,
+    required this.onSmiley,
+  });
 
   final TextEditingController controller;
   final VoidCallback onSmiley;
 
+  @override
+  State<_EmojiPanel> createState() => _EmojiPanelState();
+}
+
+class _EmojiPanelState extends State<_EmojiPanel> {
   static const _columns = 8;
   static const _tabHeight = 36.0;
+
+  final _category = ValueNotifier<Category>(Category.SMILEYS);
+
+  @override
+  void dispose() {
+    _category.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -326,7 +368,11 @@ class _EmojiPanel extends StatelessWidget {
                 child: Stack(
                   children: [
                     EmojiPicker(
-                      textEditingController: controller,
+                      textEditingController: widget.controller,
+                      onCategoryChanged: (category) {
+                        if (!mounted || _category.value == category) return;
+                        _category.value = category;
+                      },
                       config: Config(
                         height: pickerHeight,
                         checkPlatformCompatibility: false,
@@ -356,16 +402,28 @@ class _EmojiPanel extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Positioned(
-                      left: 0,
-                      top: _tabHeight,
-                      width: cell,
-                      height: cell,
-                      child: _WallSmileyCell(
-                        extent: cell,
-                        color: palette.composer,
-                        onPressed: onSmiley,
-                      ),
+                    ValueListenableBuilder<Category>(
+                      valueListenable: _category,
+                      builder: (context, category, _) {
+                        if (category != Category.SMILEYS) {
+                          return const SizedBox.shrink();
+                        }
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: _tabHeight),
+                            child: SizedBox(
+                              width: cell,
+                              height: cell,
+                              child: _WallSmileyCell(
+                                extent: cell,
+                                color: palette.composer,
+                                onPressed: widget.onSmiley,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

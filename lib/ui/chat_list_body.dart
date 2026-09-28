@@ -59,7 +59,7 @@ class ChatListBody extends ConsumerWidget {
               leading: CircleAvatar(
                 backgroundColor: const Color(0xFF1B3A31),
                 foregroundColor: Colors.white,
-                child: Text(peerByChatIdOrNull(chat.chatId)?.initial ?? '?'),
+                child: Text(chat.title.isEmpty ? '?' : chat.title[0]),
               ),
               title: Text(
                 chat.title,
@@ -75,15 +75,106 @@ class ChatListBody extends ConsumerWidget {
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-              trailing: Text(
-                formatChatTime(chat.updatedAt),
-                style: TextStyle(color: palette.quiet, fontSize: 12),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    formatChatTime(chat.updatedAt),
+                    style: TextStyle(color: palette.quiet, fontSize: 12),
+                  ),
+                  PopupMenuButton<String>(
+                    key: Key('chat-menu-${chat.chatId}'),
+                    tooltip: 'Действия с чатом',
+                    padding: EdgeInsets.zero,
+                    iconSize: 20,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    onSelected: (action) {
+                      if (action == 'rename') {
+                        _renameChat(context, ref, chat.chatId, chat.title);
+                      } else if (action == 'delete') {
+                        ref
+                            .read(chatListProvider.notifier)
+                            .deleteChat(chat.chatId);
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'rename',
+                        child: Text('Переименовать'),
+                      ),
+                      PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                    ],
+                  ),
+                ],
               ),
               onTap: () => onOpen(chat.chatId),
             );
           },
         );
       },
+    );
+  }
+}
+
+Future<void> _renameChat(
+  BuildContext context,
+  WidgetRef ref,
+  String chatId,
+  String current,
+) async {
+  final next = await showDialog<String>(
+    context: context,
+    builder: (context) => _RenameDialog(initial: current),
+  );
+  if (next == null) return;
+  ref.read(displayNamesProvider.notifier).rename(chatId, next);
+}
+
+class _RenameDialog extends StatefulWidget {
+  const _RenameDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Переименовать'),
+      content: TextField(
+        key: const Key('rename-field'),
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (value) => Navigator.of(context).pop(value),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Отмена'),
+        ),
+        TextButton(
+          key: const Key('rename-save'),
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('Сохранить'),
+        ),
+      ],
     );
   }
 }

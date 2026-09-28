@@ -3,25 +3,28 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../directory/peers.dart';
 import '../providers.dart';
 import '../session/notices.dart';
-import 'auth_screen.dart';
+import '../theme.dart';
 import 'chat_list_body.dart';
 import 'conversation_body.dart';
 import 'inbound_banner.dart';
 import 'safety_number_screen.dart';
-import 'theme_toggle.dart';
+import 'settings_menu.dart';
 
 const wideBreakpoint = 840.0;
 
 class MessengerHome extends ConsumerWidget {
   const MessengerHome({super.key});
 
-  void _open(BuildContext context, WidgetRef ref, String chatId) {
+  void _open(
+    BuildContext context,
+    WidgetRef ref,
+    String chatId, {
+    required bool wide,
+  }) {
     ref.read(selectedChatProvider.notifier).select(chatId);
     ref.read(openThreadProvider.notifier).set(chatId);
-    final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
     if (wide) return;
     unawaited(
       Navigator.of(context)
@@ -37,12 +40,11 @@ class MessengerHome extends ConsumerWidget {
     );
   }
 
-  void _openSafety(BuildContext context, String chatId) {
-    final peer = peerByChatIdOrNull(chatId);
+  void _openSafety(BuildContext context, WidgetRef ref, String chatId) {
+    final name = displayTitle(chatId, ref.read(displayNamesProvider));
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (context) =>
-            SafetyNumberScreen(peerName: peer?.name ?? 'Собеседник'),
+        builder: (context) => SafetyNumberScreen(peerName: name),
       ),
     );
   }
@@ -62,7 +64,12 @@ class MessengerHome extends ConsumerWidget {
                 onOpen: () {
                   final chatId = notice.chatId;
                   ref.read(noticeProvider.notifier).dismiss();
-                  _open(context, ref, chatId);
+                  _open(
+                    context,
+                    ref,
+                    chatId,
+                    wide: MediaQuery.sizeOf(context).width >= wideBreakpoint,
+                  );
                 },
               ),
             Expanded(child: _scaffold(context, ref, selected)),
@@ -76,49 +83,51 @@ class MessengerHome extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= wideBreakpoint;
+        final listColor = SecretPalette.of(context).listSurface;
+        final names = ref.watch(displayNamesProvider);
         if (!wide) {
           return Scaffold(
+            backgroundColor: listColor,
             appBar: AppBar(
+              backgroundColor: listColor,
               title: const Text('Чаты'),
-              actions: const [
-                _AddPersonButton(),
-                ThemeToggle(),
-                _AccountButton(),
-                _LockMark(),
-              ],
+              actions: const [_AddPersonButton(), SettingsMenu()],
             ),
-            body: ChatListBody(onOpen: (chatId) => _open(context, ref, chatId)),
+            body: ChatListBody(
+              onOpen: (chatId) => _open(context, ref, chatId, wide: wide),
+            ),
           );
         }
-        final peer = selected == null ? null : peerByChatIdOrNull(selected);
+        final title = selected == null
+            ? null
+            : displayTitle(selected, names);
         return Scaffold(
           body: SafeArea(
             child: Row(
               children: [
-                SizedBox(
-                  width: 380,
-                  child: Column(
-                    children: [
-                      const _PaneHeader(
-                        title: 'Чаты',
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _AddPersonButton(),
-                            ThemeToggle(),
-                            _AccountButton(),
-                            _LockMark(),
-                          ],
+                Material(
+                  color: listColor,
+                  child: SizedBox(
+                    width: 380,
+                    child: Column(
+                      children: [
+                        const _PaneHeader(
+                          title: 'Чаты',
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [_AddPersonButton(), SettingsMenu()],
+                          ),
                         ),
-                      ),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: ChatListBody(
-                          selectedChatId: selected,
-                          onOpen: (chatId) => _open(context, ref, chatId),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: ChatListBody(
+                            selectedChatId: selected,
+                            onOpen: (chatId) =>
+                              _open(context, ref, chatId, wide: wide),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const VerticalDivider(width: 1),
@@ -128,10 +137,11 @@ class MessengerHome extends ConsumerWidget {
                       : Column(
                           children: [
                             _PaneHeader(
-                              title: peer?.name ?? 'Собеседник',
+                              title: title!,
                               trailing: IconButton(
                                 tooltip: 'Число безопасности',
-                                onPressed: () => _openSafety(context, selected),
+                                onPressed: () =>
+                                    _openSafety(context, ref, selected),
                                 icon: const Icon(Icons.verified_user_outlined),
                               ),
                             ),
@@ -149,26 +159,24 @@ class MessengerHome extends ConsumerWidget {
   }
 }
 
-class ConversationScreen extends StatelessWidget {
+class ConversationScreen extends ConsumerWidget {
   const ConversationScreen({super.key, required this.chatId});
 
   final String chatId;
 
   @override
-  Widget build(BuildContext context) {
-    final peer = peerByChatIdOrNull(chatId);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final title = displayTitle(chatId, ref.watch(displayNamesProvider));
     return Scaffold(
       appBar: AppBar(
-        title: Text(peer?.name ?? 'Собеседник'),
+        title: Text(title),
         actions: [
-          const ThemeToggle(),
           IconButton(
             tooltip: 'Число безопасности',
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (context) =>
-                      SafetyNumberScreen(peerName: peer?.name ?? 'Собеседник'),
+                  builder: (context) => SafetyNumberScreen(peerName: title),
                 ),
               );
             },
@@ -274,32 +282,3 @@ class _AddPersonButton extends StatelessWidget {
   }
 }
 
-class _AccountButton extends ConsumerWidget {
-  const _AccountButton();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionProvider);
-    final userId = session.asData?.value.userId;
-    return IconButton(
-      key: const Key('account-button'),
-      tooltip: 'Ваш идентификатор',
-      onPressed: userId == null
-          ? null
-          : () => showAccountDialog(context, userId),
-      icon: const Icon(Icons.person_outline),
-    );
-  }
-}
-
-class _LockMark extends StatelessWidget {
-  const _LockMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(right: 12),
-      child: Icon(Icons.lock_outline, size: 20),
-    );
-  }
-}

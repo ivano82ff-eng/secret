@@ -69,13 +69,15 @@ void main() {
     await tester.tap(find.byKey(const Key('enter-chats')));
     await _flush(tester);
     expect(find.text('Чаты'), findsOneWidget);
-    expect(find.byKey(const Key('account-button')), findsOneWidget);
+    expect(find.byKey(const Key('settings-gear')), findsOneWidget);
+    expect(find.byKey(const Key('account-button')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('account-button')));
+    await tester.tap(find.byKey(const Key('settings-gear')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byKey(const Key('account-user-id')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('account-copy')));
+    expect(find.byKey(const Key('gear-user-id')), findsOneWidget);
+    expect(find.text('user-local'), findsWidgets);
+    await tester.tap(find.byKey(const Key('gear-copy')));
     await tester.pump();
     expect(await _readClipboard(tester), 'user-local');
     await _unmount(tester);
@@ -211,6 +213,8 @@ void main() {
   ) async {
     await _pumpApp(tester);
     expect(find.byKey(const Key('add-person')), findsOneWidget);
+    expect(find.byKey(const Key('settings-gear')), findsOneWidget);
+    expect(find.byKey(const Key('theme-switch')), findsNothing);
     expect(
       Theme.of(tester.element(find.text('Чаты'))).brightness,
       Brightness.light,
@@ -223,6 +227,13 @@ void main() {
     expect(find.text('Чаты'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
 
+    await tester.tap(find.byKey(const Key('settings-gear')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const Key('theme-switch')), findsOneWidget);
+    expect(find.byKey(const Key('gear-user-id')), findsOneWidget);
+    expect(find.text('user-local'), findsWidgets);
+
     await tester.tap(find.byKey(const Key('theme-switch')));
     await _flush(tester);
     expect(
@@ -230,13 +241,74 @@ void main() {
       Brightness.dark,
     );
     expect(find.byKey(const Key('empty-chats')), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
 
+    await tester.tap(find.byKey(const Key('settings-gear')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.byKey(const Key('theme-switch')));
     await _flush(tester);
     expect(
       Theme.of(tester.element(find.text('Чаты'))).brightness,
       Brightness.light,
     );
+    await _unmount(tester);
+  });
+
+  testWidgets('wall smiley hides when another emoji filter is active', (
+    tester,
+  ) async {
+    await _pumpApp(tester);
+    await _openAlexey(tester);
+    await tester.tap(find.byKey(const Key('emoji-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('wall-smiley')), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.pets));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('wall-smiley')), findsNothing);
+    expect(find.byIcon(Icons.pets), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('switching chats closes the emoji picker', (tester) async {
+    await _pumpApp(tester, seedDemo: true, size: const Size(1100, 800));
+    await tester.tap(find.byKey(const Key('chat-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const Key('emoji-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('emoji-panel')), findsOneWidget);
+    expect(find.byKey(const Key('wall-smiley')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('chat-chat-ilya')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const Key('emoji-panel')), findsNothing);
+    expect(find.byKey(const Key('wall-smiley')), findsNothing);
+    final field = tester.widget<TextField>(find.byKey(const Key('composer')));
+    expect(field.focusNode?.hasFocus, isTrue);
+    await _unmount(tester);
+  });
+
+  testWidgets('rename changes the chat list label', (tester) async {
+    await _pumpApp(tester, seedDemo: true);
+    expect(find.text('Марина Соколова'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('chat-menu-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('Переименовать'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.enterText(find.byKey(const Key('rename-field')), 'Маша');
+    await tester.tap(find.byKey(const Key('rename-save')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Маша'), findsOneWidget);
+    expect(find.text('Марина Соколова'), findsNothing);
     await _unmount(tester);
   });
 
@@ -296,11 +368,13 @@ class _Harness {
 Future<_Harness> _pumpApp(
   WidgetTester tester, {
   bool storedIdentity = true,
+  bool seedDemo = false,
+  Size size = const Size(390, 844),
   AttachmentPicker? picker,
   VoiceRecorder? recorder,
   _Harness? harness,
 }) async {
-  await tester.binding.setSurfaceSize(const Size(390, 844));
+  await tester.binding.setSurfaceSize(size);
   final next =
       harness ?? _Harness(AppDatabase(NativeDatabase.memory()), _MemoryVault());
   if (harness == null) {
@@ -313,7 +387,7 @@ Future<_Harness> _pumpApp(
     ProviderScope(
       overrides: [
         databaseProvider.overrideWithValue(next.database),
-        seedDemoProvider.overrideWithValue(false),
+        seedDemoProvider.overrideWithValue(seedDemo),
         previewModeProvider.overrideWithValue(PreviewMode.normal),
         privateKeyVaultProvider.overrideWithValue(next.vault),
         if (picker != null) attachmentPickerProvider.overrideWithValue(picker),

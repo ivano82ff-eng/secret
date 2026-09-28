@@ -99,35 +99,3 @@ class AuthScreen extends StatelessWidget {
   }
 }
 
-void showAccountDialog(BuildContext context, String userId) {
-  showDialog<void>(
-    context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: const Text('Ваш идентификатор'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SelectableText(userId, key: const Key('account-user-id')),
-            const SizedBox(height: 12),
-            const Text(
-              'Его отправляют собеседнику. Идентификатор устройства — не адрес.',
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            key: const Key('account-copy'),
-            onPressed: () => copyUserId(context, userId),
-            child: const Text('Скопировать'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Закрыть'),
-          ),
-        ],
-      );
-    },
-  );
-}

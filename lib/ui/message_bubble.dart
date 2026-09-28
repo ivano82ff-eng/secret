@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../directory/peers.dart';
@@ -10,9 +11,10 @@ import 'time_format.dart';
 import 'wall_smiley.dart';
 
 class MessageBubble extends ConsumerWidget {
-  const MessageBubble({super.key, required this.message});
+  const MessageBubble({super.key, required this.message, this.onQuote});
 
   final DisplayMessage message;
+  final ValueChanged<String>? onQuote;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,7 +33,7 @@ class MessageBubble extends ConsumerWidget {
         constraints: const BoxConstraints(maxWidth: 460),
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 4),
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+          padding: EdgeInsets.fromLTRB(14, 10, outgoing ? 4 : 14, 8),
           decoration: BoxDecoration(
             color: outgoing ? palette.outgoing : palette.incoming,
             borderRadius: BorderRadius.circular(18),
@@ -48,9 +50,19 @@ class MessageBubble extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _body(context, ref, ink),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _body(context, ref, ink),
+                    ),
+                  ),
+                  if (outgoing)
+                    _MessageActions(message: message, onQuote: onQuote),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
@@ -77,6 +89,151 @@ class MessageBubble extends ConsumerWidget {
         style: TextStyle(color: ink, height: 1.35, fontSize: 20),
       ),
     };
+  }
+}
+
+class _MessageActions extends ConsumerWidget {
+  const _MessageActions({required this.message, required this.onQuote});
+
+  final DisplayMessage message;
+  final ValueChanged<String>? onQuote;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final meta = SecretPalette.of(context).outgoingMeta;
+    return PopupMenuButton<String>(
+      key: Key('message-actions-${message.envelope.id}'),
+      tooltip: 'Действия с сообщением',
+      padding: EdgeInsets.zero,
+      icon: Icon(Icons.more_horiz, color: meta, size: 18),
+      iconSize: 18,
+      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+      onSelected: (action) => _run(context, ref, action),
+      itemBuilder: (context) => const [
+        PopupMenuItem(value: 'edit', child: Text('Изменить')),
+        PopupMenuItem(value: 'delete', child: Text('Удалить')),
+        PopupMenuItem(value: 'copy', child: Text('Копировать')),
+        PopupMenuItem(value: 'forward', child: Text('Переслать')),
+        PopupMenuItem(value: 'quote', child: Text('Цитировать')),
+      ],
+    );
+  }
+
+  Future<void> _run(BuildContext context, WidgetRef ref, String action) async {
+    final thread = ref.read(
+      threadProvider(message.envelope.chatId).notifier,
+    );
+    switch (action) {
+      case 'edit':
+        final next = await showDialog<String>(
+          context: context,
+          builder: (context) => _EditDialog(initial: _snippet(message)),
+        );
+        if (next == null) return;
+        await thread.editMessage(message.envelope.id, next);
+      case 'delete':
+        await thread.deleteMessage(message.envelope.id);
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: _snippet(message)));
+      case 'forward':
+        final target = await _pickChat(context, ref, message.envelope.chatId);
+        if (target == null) return;
+        await thread.forwardTo(message, target);
+      case 'quote':
+        onQuote?.call(_snippet(message));
+    }
+  }
+}
+
+String _snippet(DisplayMessage message) {
+  return switch (message.kind) {
+    MockKind.text => message.mockDisplayText,
+    MockKind.file => message.mockFileName ?? 'Файл',
+    MockKind.voice => 'Голосовое',
+    MockKind.wallSmiley => '',
+  };
+}
+
+Future<String?> _pickChat(
+  BuildContext context,
+  WidgetRef ref,
+  String currentChatId,
+) {
+  final chats =
+      ref.read(chatListProvider).asData?.value ?? const <ChatSummary>[];
+  final others = chats.where((chat) => chat.chatId != currentChatId).toList();
+  return showDialog<String>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Переслать'),
+        content: others.isEmpty
+            ? const Text('Нет других переписок')
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final chat in others)
+                    ListTile(
+                      key: Key('forward-${chat.chatId}'),
+                      title: Text(chat.title),
+                      onTap: () => Navigator.of(context).pop(chat.chatId),
+                    ),
+                ],
+              ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Отмена'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _EditDialog extends StatefulWidget {
+  const _EditDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_EditDialog> createState() => _EditDialogState();
+}
+
+class _EditDialogState extends State<_EditDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Изменить'),
+      content: TextField(
+        key: const Key('edit-field'),
+        controller: _controller,
+        autofocus: true,
+        minLines: 1,
+        maxLines: 4,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Отмена'),
+        ),
+        TextButton(
+          key: const Key('edit-save'),
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('Сохранить'),
+        ),
+      ],
+    );
   }
 }
 
