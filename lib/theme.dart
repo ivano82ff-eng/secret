@@ -261,3 +261,48 @@ class ThemeModeController extends Notifier<ThemeMode> {
 final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(
   ThemeModeController.new,
 );
+
+/// Thread backgrounds. Facets is the default. Bubbles are not a choice:
+/// they replace the thread only while extra encryption is on.
+enum ThreadWallpaper { facets, geometry, drops }
+
+extension ThreadWallpaperLabel on ThreadWallpaper {
+  String get label => switch (this) {
+    ThreadWallpaper.facets => 'Грани',
+    ThreadWallpaper.geometry => 'Геометрия',
+    ThreadWallpaper.drops => 'Капли',
+  };
+}
+
+class WallpaperController extends Notifier<ThreadWallpaper> {
+  static const storageKey = 'wallpaper';
+
+  @override
+  ThreadWallpaper build() {
+    _restore();
+    return ThreadWallpaper.facets;
+  }
+
+  void _restore() {
+    SharedPreferences.getInstance().then((prefs) {
+      if (!ref.mounted) return;
+      final next = switch (prefs.getString(storageKey)) {
+        'geometry' => ThreadWallpaper.geometry,
+        'drops' => ThreadWallpaper.drops,
+        _ => ThreadWallpaper.facets,
+      };
+      if (next != state) state = next;
+    });
+  }
+
+  Future<void> select(ThreadWallpaper next) async {
+    state = next;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(storageKey, next.name);
+  }
+}
+
+final wallpaperProvider =
+    NotifierProvider<WallpaperController, ThreadWallpaper>(
+      WallpaperController.new,
+    );

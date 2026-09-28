@@ -404,6 +404,29 @@ void main() {
     await _unmount(tester);
   });
 
+  testWidgets('settings switches the thread background', (tester) async {
+    await _pumpApp(tester, seedDemo: true, size: const Size(1100, 800));
+    await tester.tap(find.byKey(const Key('chat-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('wallpaper-facets')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('settings-gear')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byKey(const Key('wallpaper-switch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Капли'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('wallpaper-choice-drops')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const Key('wallpaper-drops')), findsOneWidget);
+    expect(find.byKey(const Key('thread-wallpaper')), findsOneWidget);
+    await _unmount(tester);
+  });
+
   testWidgets('wall smiley hides when another emoji filter is active', (
     tester,
   ) async {

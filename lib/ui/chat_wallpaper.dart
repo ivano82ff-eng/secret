@@ -1,23 +1,35 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme.dart';
 
-/// Geometric pattern behind a thread, in the blue-gray palette.
-class ChatWallpaper extends StatelessWidget {
+/// Thread background. Facets by default; geometry and drops are choices.
+/// Extra encryption replaces the choice with soap bubbles.
+class ChatWallpaper extends ConsumerWidget {
   const ChatWallpaper({super.key, this.locked = false});
 
   final bool locked;
 
   @override
-  Widget build(BuildContext context) {
-    final palette = SecretPalette.of(context);
-    return ClipRect(
-      child: CustomPaint(
-        key: Key(locked ? 'lock-wallpaper' : 'thread-wallpaper'),
-        painter: _PatternPainter(palette, locked: locked),
-        child: const SizedBox.expand(),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final style = ref.watch(wallpaperProvider);
+    final painter = locked
+        ? const _BubblesPainter()
+        : switch (style) {
+            ThreadWallpaper.facets => const _FacetsPainter(),
+            ThreadWallpaper.geometry => const _GeometryPainter(),
+            ThreadWallpaper.drops => const _DropsPainter(),
+          };
+    return KeyedSubtree(
+      key: Key(locked ? 'lock-style' : 'wallpaper-${style.name}'),
+      child: ClipRect(
+        child: CustomPaint(
+          key: Key(locked ? 'lock-wallpaper' : 'thread-wallpaper'),
+          painter: painter,
+          child: const SizedBox.expand(),
+        ),
       ),
     );
   }
@@ -41,60 +53,91 @@ class LockFieldMark extends StatelessWidget {
   }
 }
 
-class _PatternPainter extends CustomPainter {
-  _PatternPainter(this.palette, {required this.locked});
-
-  final SecretPalette palette;
-  final bool locked;
+class _FacetsPainter extends CustomPainter {
+  const _FacetsPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.clipRect(Offset.zero & size);
-    final base = locked ? palette.lockedWallpaper : palette.wallpaperBase;
-    canvas.drawRect(Offset.zero & size, Paint()..color = base);
-    final night = palette.night;
-    final line = (night ? const Color(0xFFD7E8F6) : const Color(0xFF2F6FA8))
-        .withValues(
-          alpha: locked ? (night ? 0.62 : 0.5) : (night ? 0.4 : 0.34),
-        );
-    final soft = (night ? const Color(0xFF6AA6D4) : const Color(0xFF7AA6C9))
-        .withValues(alpha: locked ? 0.28 : 0.18);
-    _orb(
-      canvas,
-      Offset(size.width * 0.08, size.height * 0.12),
-      size.shortestSide * 0.42,
-      soft,
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFF1E2126),
+    );
+    const step = 46.0;
+    Offset point(int x, int y) {
+      final jx = (_hash(x, y) % 19 - 9) * 1.3;
+      final jy = (_hash(y + 4, x) % 19 - 9) * 1.3;
+      return Offset(x * step + jx, y * step + jy);
+    }
+
+    final cols = (size.width / step).ceil() + 2;
+    final rows = (size.height / step).ceil() + 2;
+    for (var y = -1; y < rows; y++) {
+      for (var x = -1; x < cols; x++) {
+        final a = point(x, y);
+        final b = point(x + 1, y);
+        final c = point(x, y + 1);
+        final d = point(x + 1, y + 1);
+        _facet(canvas, a, b, d, _facetShade(x, y));
+        _facet(canvas, a, d, c, _facetShade(x + 7, y + 3));
+      }
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _FacetsPainter oldDelegate) => false;
+}
+
+class _GeometryPainter extends CustomPainter {
+  const _GeometryPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFF140B22),
     );
     _orb(
       canvas,
-      Offset(size.width * 0.92, size.height * 0.78),
-      size.shortestSide * 0.5,
-      soft,
+      Offset(size.width * 0.18, size.height * 0.14),
+      size.shortestSide * 0.4,
+      const Color(0xFFE445B0).withValues(alpha: 0.55),
     );
-    const step = 156.0;
-    final stroke = locked ? 1.7 : 1.45;
+    _orb(
+      canvas,
+      Offset(size.width * 0.88, size.height * 0.8),
+      size.shortestSide * 0.46,
+      const Color(0xFF7A4DFF).withValues(alpha: 0.42),
+    );
+    const pink = Color(0xFFFF4FA3);
+    const violet = Color(0xFFC9A6FF);
+    const step = 150.0;
     final rows = (size.height / step).ceil() + 1;
     final cols = (size.width / step).ceil() + 1;
     for (var row = 0; row < rows; row++) {
-      final shift = row.isOdd ? step * 0.48 : 0.0;
+      final shift = row.isOdd ? step * 0.46 : 0.0;
       for (var col = 0; col < cols; col++) {
-        final center = Offset(col * step + shift - 20, row * step + 18);
+        final center = Offset(col * step + shift - 16, row * step + 20);
+        final color = (row + col).isEven ? pink : violet;
         switch ((row * 3 + col) % 7) {
           case 0:
-            _triangle(canvas, center, 28, -0.4, line, stroke);
+            _triangle(canvas, center, 26, -0.5, color, 1.6);
           case 1:
-            _diamond(canvas, center, 34, line, stroke);
+            _diamond(canvas, center, 36, color, 1.7);
           case 2:
-            _hatch(canvas, center, line, stroke);
+            _hatch(canvas, center, color, 1.4);
           case 3:
-            _ring(canvas, center, 11, line, stroke);
+            _ring(canvas, center, 10, color, 1.5);
           case 4:
-            _ray(canvas, center, line, stroke);
+            _ray(canvas, center, color, 1.6);
           case 5:
-            _spiral(canvas, center, 26, line, stroke);
+            _spiral(canvas, center, 24, color, 1.4);
           default:
-            _cube(canvas, center, line, stroke);
+            _cube(canvas, center, color, 1.3);
         }
       }
     }
@@ -102,10 +145,154 @@ class _PatternPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _PatternPainter oldDelegate) {
-    return oldDelegate.palette.night != palette.night ||
-        oldDelegate.locked != locked;
+  bool shouldRepaint(covariant _GeometryPainter oldDelegate) => false;
+}
+
+class _DropsPainter extends CustomPainter {
+  const _DropsPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    final rect = Offset.zero & size;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFE7EAEE), Color(0xFF8E949C)],
+        ).createShader(rect),
+    );
+    final count = (size.width * size.height / 3200).clamp(36, 140).round();
+    for (var i = 0; i < count; i++) {
+      final x = (_hash(i, 11) % 10000) / 10000 * size.width;
+      final y = (_hash(i, 29) % 10000) / 10000 * size.height;
+      final big = _hash(i, 5) % 9 == 0;
+      final radius = big ? 12.0 + (_hash(i, 7) % 20) : 1.6 + (_hash(i, 7) % 7);
+      _drop(canvas, Offset(x, y), radius);
+    }
+    canvas.restore();
   }
+
+  @override
+  bool shouldRepaint(covariant _DropsPainter oldDelegate) => false;
+}
+
+class _BubblesPainter extends CustomPainter {
+  const _BubblesPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFF07080C),
+    );
+    const count = 42;
+    for (var i = 0; i < count; i++) {
+      final x = (_hash(i, 3) % 10000) / 10000 * size.width;
+      final y = (_hash(i, 8) % 10000) / 10000 * size.height;
+      final radius = i < 7
+          ? 26.0 + (_hash(i, 13) % 48)
+          : 3.0 + (_hash(i, 13) % 14);
+      _soapBubble(canvas, Offset(x, y), radius);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _BubblesPainter oldDelegate) => false;
+}
+
+int _hash(int x, int y) {
+  var n = (x + 19) * 374761393 + (y + 41) * 668265263;
+  n = (n ^ (n >> 13)) * 1274126177;
+  return n & 0x7fffffff;
+}
+
+Color _facetShade(int x, int y) {
+  final n = _hash(x, y) % 100;
+  if (n > 93) return const Color(0xFFD7DBE2);
+  if (n > 80) return const Color(0xFF8E949E);
+  if (n > 58) return const Color(0xFF4C525C);
+  if (n > 32) return const Color(0xFF343840);
+  return const Color(0xFF22262C);
+}
+
+void _facet(Canvas canvas, Offset a, Offset b, Offset c, Color color) {
+  final path = Path()
+    ..moveTo(a.dx, a.dy)
+    ..lineTo(b.dx, b.dy)
+    ..lineTo(c.dx, c.dy)
+    ..close();
+  canvas.drawPath(path, Paint()..color = color);
+}
+
+void _drop(Canvas canvas, Offset center, double radius) {
+  canvas.drawCircle(
+    center,
+    radius,
+    Paint()..color = Colors.white.withValues(alpha: 0.28),
+  );
+  canvas.drawCircle(
+    center + Offset(radius * 0.06, radius * 0.16),
+    radius * 0.9,
+    Paint()..color = const Color(0xFF4E555E).withValues(alpha: 0.16),
+  );
+  canvas.drawCircle(
+    center,
+    radius,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (radius * 0.09).clamp(0.5, 1.5)
+      ..color = Colors.white.withValues(alpha: 0.72),
+  );
+  canvas.drawCircle(
+    center + Offset(-radius * 0.28, -radius * 0.3),
+    radius * 0.2,
+    Paint()..color = Colors.white.withValues(alpha: 0.9),
+  );
+}
+
+void _soapBubble(Canvas canvas, Offset center, double radius) {
+  canvas.drawCircle(
+    center,
+    radius,
+    Paint()..color = const Color(0xFFB388FF).withValues(alpha: 0.08),
+  );
+  canvas.drawCircle(
+    center,
+    radius,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (radius * 0.045).clamp(1.1, 2.8)
+      ..color = Colors.white.withValues(alpha: 0.82),
+  );
+  canvas.drawCircle(
+    center,
+    radius * 0.9,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (radius * 0.03).clamp(0.7, 1.8)
+      ..color = const Color(0xFF9B6DFF).withValues(alpha: 0.5),
+  );
+  canvas.drawArc(
+    Rect.fromCircle(
+      center: center + Offset(-radius * 0.04, -radius * 0.06),
+      radius: radius * 0.7,
+    ),
+    math.pi * 1.15,
+    math.pi * 0.5,
+    false,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = (radius * 0.055).clamp(1, 2.6)
+      ..color = Colors.white.withValues(alpha: 0.92),
+  );
 }
 
 void _orb(Canvas canvas, Offset center, double radius, Color color) {

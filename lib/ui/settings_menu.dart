@@ -5,7 +5,7 @@ import '../providers.dart';
 import '../theme.dart';
 import 'auth_screen.dart';
 
-enum _GearAction { theme, copy }
+enum _GearAction { theme, wallpaper, copy }
 
 class SettingsMenu extends ConsumerWidget {
   const SettingsMenu({super.key});
@@ -23,6 +23,8 @@ class SettingsMenu extends ConsumerWidget {
         switch (action) {
           case _GearAction.theme:
             ref.read(themeModeProvider.notifier).toggle();
+          case _GearAction.wallpaper:
+            _pickWallpaper(context, ref);
           case _GearAction.copy:
             if (userId != null) copyUserId(context, userId);
         }
@@ -41,6 +43,17 @@ class SettingsMenu extends ConsumerWidget {
             ],
           ),
         ),
+        const PopupMenuItem(
+          key: Key('wallpaper-switch'),
+          value: _GearAction.wallpaper,
+          child: Row(
+            children: [
+              Icon(Icons.wallpaper_outlined),
+              SizedBox(width: 12),
+              Text('Смена фона'),
+            ],
+          ),
+        ),
         if (userId != null)
           PopupMenuItem(
             enabled: false,
@@ -55,4 +68,34 @@ class SettingsMenu extends ConsumerWidget {
       ],
     );
   }
+}
+
+Future<void> _pickWallpaper(BuildContext context, WidgetRef ref) {
+  final current = ref.read(wallpaperProvider);
+  return showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      key: const Key('wallpaper-dialog'),
+      title: const Text('Смена фона'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final choice in ThreadWallpaper.values)
+            ListTile(
+              key: Key('wallpaper-choice-${choice.name}'),
+              leading: Icon(
+                choice == current
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+              ),
+              title: Text(choice.label),
+              onTap: () {
+                ref.read(wallpaperProvider.notifier).select(choice);
+                Navigator.of(context).pop();
+              },
+            ),
+        ],
+      ),
+    ),
+  );
 }
