@@ -25,6 +25,7 @@ import 'models/server_models.dart';
 import 'notifications/neutral_notifications.dart';
 import 'session/local_media.dart';
 import 'session/notices.dart';
+import 'session/user_id.dart';
 import 'transport/messenger_transport.dart';
 import 'transport/mock_messenger_transport.dart';
 
@@ -94,11 +95,35 @@ final identityProvider = FutureProvider<IdentityLoad>((ref) async {
   }
 });
 
+final userIdStoreProvider = Provider<UserIdStore>((ref) {
+  return FlutterSecureUserIdStore(const FlutterSecureStorage());
+});
+
 final sessionProvider = FutureProvider<RegistrationResult>((ref) async {
   final identity = await ref.watch(identityProvider.future);
   final transport = ref.watch(transportProvider);
-  return transport.registerDevice(_stubRegistration(identity.info));
+  final store = ref.watch(userIdStoreProvider);
+  final stored = await store.read();
+  if (transport is MockMessengerTransport &&
+      stored != null &&
+      userIdPattern.hasMatch(stored)) {
+    transport.holdUserId(stored);
+  }
+  final result = await transport.registerDevice(
+    _stubRegistration(identity.info),
+  );
+  if (!userIdPattern.hasMatch(result.userId)) {
+    throw StateError('userId is not canonical');
+  }
+  if (stored != result.userId) {
+    await store.write(result.userId);
+  }
+  return result;
 });
+
+String readLocalUserId(Ref ref) {
+  return ref.read(sessionProvider).requireValue.userId;
+}
 
 class IntroVisible extends AsyncNotifier<bool> {
   @override
@@ -209,7 +234,8 @@ class ChatListNotifier extends AsyncNotifier<List<ChatSummary>> {
 
     final repository = ref.watch(envelopeRepositoryProvider);
     if (ref.watch(seedDemoProvider)) {
-      await ref.read(demoSeederProvider).seedIfEmpty();
+      final userId = (await ref.watch(sessionProvider.future)).userId;
+      await ref.read(demoSeederProvider).seedIfEmpty(userId);
     }
     return summarize(await repository.listAll(), names);
   }
@@ -316,7 +342,7 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     final outbound = Envelope(
       id: _newId(),
       chatId: chatId,
-      sender: localUserId,
+      sender: readLocalUserId(ref),
       createdAt: DateTime.now().toUtc(),
       ciphertext: base64Encode(sealed),
       status: EnvelopeStatus.pending,
@@ -372,7 +398,7 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     final copy = Envelope(
       id: _newId(),
       chatId: targetChatId,
-      sender: localUserId,
+      sender: readLocalUserId(ref),
       createdAt: DateTime.now().toUtc(),
       ciphertext: base64Encode(sealed),
       status: EnvelopeStatus.sent,
@@ -505,7 +531,7 @@ class InboundHub extends Notifier<int> {
   }
 
   void _consider(Envelope envelope) {
-    if (envelope.sender == localUserId) return;
+    if (envelope.sender == readLocalUserId(ref)) return;
     if (envelope.chatId == ref.read(openThreadProvider)) return;
     final name = displayTitle(envelope.chatId, ref.read(displayNamesProvider));
     ref

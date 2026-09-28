@@ -36,7 +36,7 @@ flutter build ios --no-codesign
 
 `flutter build apk` needs an Android SDK. `flutter build windows` needs a Windows host. `flutter build macos` and `flutter build ios` need a Mac with Xcode. On this machine `flutter build web` completed and wrote `build/web`. Linux was not compiled here: Ninja and the GTK 3 development libraries are not installed. The Android SDK is not installed, so the APK was not built. The Android, iOS, Linux, macOS, and Windows project folders are still in the tree.
 
-The first launch creates an X25519 identity, calls the mock `POST /v1/devices`, and shows the issued `userId`. That id is what you send to the other person. A later launch with a stored key opens the chat list. There is no password.
+The first launch creates an X25519 identity, calls the mock `POST /v1/devices`, and shows the issued `userId` in the form `456 N 634` (three digits, a space, one uppercase letter A–Z, a space, three digits). That id is what you send to the other person. It is stored on the device, so the next launch of the same install shows the same code. A later launch with a stored key opens the chat list, and the code stays in the gear menu. There is no password.
 
 The chat list starts with three local conversations. Sending in a thread appends your envelope and a mock inbound reply. The list preview stays the neutral placeholder «Сообщение».
 
