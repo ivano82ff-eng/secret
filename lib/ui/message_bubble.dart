@@ -65,12 +65,27 @@ class MessageBubble extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(
-                [
-                  formatChatTime(message.envelope.createdAt),
-                  if (outgoing && status.isNotEmpty) status,
-                ].join(' · '),
-                style: TextStyle(color: meta, fontSize: 12, height: 1.2),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (message.extraLayer)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Icon(
+                        Icons.lock,
+                        key: Key('bubble-lock-${message.envelope.id}'),
+                        size: 14,
+                        color: meta,
+                      ),
+                    ),
+                  Text(
+                    [
+                      formatChatTime(message.envelope.createdAt),
+                      if (outgoing && status.isNotEmpty) status,
+                    ].join(' · '),
+                    style: TextStyle(color: meta, fontSize: 12, height: 1.2),
+                  ),
+                ],
               ),
             ],
           ),
@@ -217,7 +232,9 @@ class _EditDialogState extends State<_EditDialog> {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final minWidth = width < 448 ? (width - 80).clamp(0, 420).toDouble() : 420.0;
+    final minWidth = width < 448
+        ? (width - 80).clamp(0, 420).toDouble()
+        : 420.0;
     return AlertDialog(
       scrollable: true,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),

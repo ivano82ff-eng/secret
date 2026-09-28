@@ -173,6 +173,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
   Widget build(BuildContext context) {
     final thread = ref.watch(threadProvider(widget.chatId));
     final palette = SecretPalette.of(context);
+    final locked = ref.watch(extraEncryptionProvider).contains(widget.chatId);
     return Column(
       children: [
         Expanded(
@@ -180,7 +181,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
             child: Stack(
               clipBehavior: Clip.hardEdge,
               children: [
-                const ChatWallpaper(),
+                ChatWallpaper(locked: locked),
                 thread.when(
                   skipLoadingOnReload: true,
                   loading: () => const StatusPanel(

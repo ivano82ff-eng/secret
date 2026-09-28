@@ -20,9 +20,27 @@ flutter run -d web-server --web-hostname 127.0.0.1 --web-port 43123
 
 Open http://127.0.0.1:43123
 
+## Build
+
+Project folders exist for web, Android, iOS, Linux, macOS, and Windows. These are Flutter targets, not a separate native app.
+
+```bash
+flutter build web
+flutter build apk
+flutter build appbundle
+flutter build linux
+flutter build windows
+flutter build macos
+flutter build ios --no-codesign
+```
+
+`flutter build apk` needs an Android SDK. `flutter build windows` needs a Windows host. `flutter build macos` and `flutter build ios` need a Mac with Xcode. On this machine `flutter build web` completed and wrote `build/web`. Linux was not compiled here: Ninja and the GTK 3 development libraries are not installed. The Android SDK is not installed, so the APK was not built. The Android, iOS, Linux, macOS, and Windows project folders are still in the tree.
+
 The first launch creates an X25519 identity, calls the mock `POST /v1/devices`, and shows the issued `userId`. That id is what you send to the other person. A later launch with a stored key opens the chat list. There is no password.
 
 The chat list starts with three local conversations. Sending in a thread appends your envelope and a mock inbound reply. The list preview stays the neutral placeholder «Сообщение».
+
+«Дополнительное шифрование» in a chat’s menu applies only to that chat and is kept on this device. While it is on, the list row and the thread show a lock, and the thread wallpaper is a lock pattern clipped to the conversation pane. A message is still encrypted with the session cipher first. Those ciphertext bytes are then hidden in the least significant bits of a lossless lock-pattern PNG, and that PNG is what the envelope stores as `ciphertext` (base64). Chats with the toggle off keep the normal ciphertext and the normal wallpaper. Turning it off restores the row and the wallpaper. No filename, mime type, or key is added to the wire JSON.
 
 The composer has an emoji picker and one original animated smiley (a face against a brick wall). Files and short voice messages stay on this device: the bubble shows a name or a duration, and the wire envelope stays ciphertext only. If the microphone is blocked, the chat still sends text.
 

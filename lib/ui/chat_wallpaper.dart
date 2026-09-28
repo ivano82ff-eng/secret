@@ -4,15 +4,19 @@ import '../theme.dart';
 
 /// Soft abstract wash behind a thread. Bubbles stay on top of it.
 class ChatWallpaper extends StatelessWidget {
-  const ChatWallpaper({super.key});
+  const ChatWallpaper({super.key, this.locked = false});
+
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
     final palette = SecretPalette.of(context);
     return ClipRect(
       child: CustomPaint(
-        key: const Key('thread-wallpaper'),
-        painter: _WallpaperPainter(palette),
+        key: Key(locked ? 'lock-wallpaper' : 'thread-wallpaper'),
+        painter: locked
+            ? _LockWallpaperPainter(palette)
+            : _WallpaperPainter(palette),
         child: const SizedBox.expand(),
       ),
     );
@@ -104,6 +108,66 @@ class _WallpaperPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WallpaperPainter oldDelegate) {
+    return oldDelegate.palette.night != palette.night;
+  }
+}
+
+class _LockWallpaperPainter extends CustomPainter {
+  _LockWallpaperPainter(this.palette);
+
+  final SecretPalette palette;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    final base = palette.night
+        ? const Color(0xFF1A2433)
+        : const Color(0xFFD7DEE8);
+    canvas.drawRect(Offset.zero & size, Paint()..color = base);
+    final ink = palette.night
+        ? const Color(0xFFE4D2B0).withValues(alpha: 0.38)
+        : const Color(0xFF3D4E63).withValues(alpha: 0.32);
+    const step = 84.0;
+    for (var y = step / 2; y < size.height; y += step) {
+      for (var x = step / 2; x < size.width; x += step) {
+        _drawLock(canvas, Offset(x, y), 22, ink);
+      }
+    }
+    canvas.restore();
+  }
+
+  void _drawLock(Canvas canvas, Offset center, double extent, Color color) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = extent * 0.08
+      ..color = color;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: center + Offset(0, extent * 0.16),
+          width: extent * 0.7,
+          height: extent * 0.52,
+        ),
+        Radius.circular(extent * 0.08),
+      ),
+      paint,
+    );
+    canvas.drawArc(
+      Rect.fromCenter(
+        center: center + Offset(0, -extent * 0.02),
+        width: extent * 0.4,
+        height: extent * 0.42,
+      ),
+      3.15,
+      3.15,
+      false,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _LockWallpaperPainter oldDelegate) {
     return oldDelegate.palette.night != palette.night;
   }
 }

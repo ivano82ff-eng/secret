@@ -40,6 +40,14 @@ class SecretPalette extends ThemeExtension<SecretPalette> {
   Color get listSurface =>
       night ? const Color(0xFF070C10) : const Color(0xFFB7C2BC);
 
+  /// Warm row used only while extra encryption is on for that chat.
+  Color extraRow({required bool selected}) {
+    if (night) {
+      return selected ? const Color(0xFF4E4032) : const Color(0xFF3A3026);
+    }
+    return selected ? const Color(0xFFD7B48A) : const Color(0xFFE4C9A4);
+  }
+
   static SecretPalette of(BuildContext context) {
     return Theme.of(context).extension<SecretPalette>()!;
   }

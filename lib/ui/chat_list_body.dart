@@ -48,10 +48,16 @@ class ChatListBody extends ConsumerWidget {
             final chat = items[index];
             final selected = chat.chatId == selectedChatId;
             final palette = SecretPalette.of(context);
+            final extra = ref
+                .watch(extraEncryptionProvider)
+                .contains(chat.chatId);
             return ListTile(
               key: Key('chat-${chat.chatId}'),
               selected: selected,
-              selectedTileColor: palette.outgoing.withValues(alpha: 0.55),
+              tileColor: extra ? palette.extraRow(selected: false) : null,
+              selectedTileColor: extra
+                  ? palette.extraRow(selected: true)
+                  : palette.outgoing.withValues(alpha: 0.55),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 6,
@@ -61,11 +67,28 @@ class ChatListBody extends ConsumerWidget {
                 foregroundColor: Colors.white,
                 child: Text(chat.title.isEmpty ? '?' : chat.title[0]),
               ),
-              title: Text(
-                chat.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+              title: Row(
+                children: [
+                  if (extra) ...[
+                    Icon(
+                      Icons.lock,
+                      key: Key('chat-lock-${chat.chatId}'),
+                      size: 16,
+                      color: palette.night
+                          ? const Color(0xFFE6D2B0)
+                          : const Color(0xFF6B4E2E),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Flexible(
+                    child: Text(
+                      chat.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
               ),
               subtitle: Text(
                 chat.preview,
@@ -98,14 +121,27 @@ class ChatListBody extends ConsumerWidget {
                         ref
                             .read(chatListProvider.notifier)
                             .deleteChat(chat.chatId);
+                      } else if (action == 'extra') {
+                        ref
+                            .read(extraEncryptionProvider.notifier)
+                            .toggle(chat.chatId);
                       }
                     },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
                         value: 'rename',
                         child: Text('Переименовать'),
                       ),
-                      PopupMenuItem(value: 'delete', child: Text('Удалить')),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Удалить'),
+                      ),
+                      CheckedPopupMenuItem(
+                        key: Key('extra-encryption-${chat.chatId}'),
+                        value: 'extra',
+                        checked: extra,
+                        child: const Text('Дополнительное шифрование'),
+                      ),
                     ],
                   ),
                 ],

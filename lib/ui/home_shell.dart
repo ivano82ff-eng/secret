@@ -99,6 +99,9 @@ class MessengerHome extends ConsumerWidget {
           );
         }
         final title = selected == null ? null : displayTitle(selected, names);
+        final threadLocked =
+            selected != null &&
+            ref.watch(extraEncryptionProvider).contains(selected);
         return Scaffold(
           body: SafeArea(
             child: Row(
@@ -137,6 +140,7 @@ class MessengerHome extends ConsumerWidget {
                             children: [
                               _PaneHeader(
                                 title: title!,
+                                locked: threadLocked,
                                 trailing: IconButton(
                                   tooltip: 'Число безопасности',
                                   onPressed: () =>
@@ -171,9 +175,20 @@ class ConversationScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final title = displayTitle(chatId, ref.watch(displayNamesProvider));
+    final locked = ref.watch(extraEncryptionProvider).contains(chatId);
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: Row(
+          children: [
+            if (locked) ...[
+              const Icon(Icons.lock, key: Key('thread-lock'), size: 18),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Text(title, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Число безопасности',
@@ -209,10 +224,15 @@ class StatusPlaceholder extends StatelessWidget {
 }
 
 class _PaneHeader extends StatelessWidget {
-  const _PaneHeader({required this.title, required this.trailing});
+  const _PaneHeader({
+    required this.title,
+    required this.trailing,
+    this.locked = false,
+  });
 
   final String title;
   final Widget trailing;
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
@@ -223,6 +243,10 @@ class _PaneHeader extends StatelessWidget {
         child: Row(
           children: [
             const SizedBox(width: 8),
+            if (locked) ...[
+              const Icon(Icons.lock, key: Key('thread-lock'), size: 18),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Text(
                 title,

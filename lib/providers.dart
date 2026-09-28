@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'crypto/identity_key_store.dart';
+import 'crypto/lock_stego.dart';
 import 'crypto/mock_session_cipher.dart';
 import 'crypto/private_key_vault.dart';
 import 'crypto/session_cipher.dart';
@@ -163,6 +164,24 @@ class DisplayNames extends Notifier<Map<String, String>> {
 final displayNamesProvider =
     NotifierProvider<DisplayNames, Map<String, String>>(DisplayNames.new);
 
+/// Local per-chat flag. It does not change the mock envelope or the cipher.
+class ExtraEncryption extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  bool enabled(String chatId) => state.contains(chatId);
+
+  void toggle(String chatId) {
+    final next = {...state};
+    if (!next.add(chatId)) next.remove(chatId);
+    state = next;
+  }
+}
+
+final extraEncryptionProvider = NotifierProvider<ExtraEncryption, Set<String>>(
+  ExtraEncryption.new,
+);
+
 String displayTitle(String chatId, Map<String, String> names) {
   final override = names[chatId];
   if (override != null && override.isNotEmpty) return override;
@@ -289,15 +308,17 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     final repository = ref.read(envelopeRepositoryProvider);
     final cipher = ref.read(sessionCipherProvider);
     final transport = ref.read(transportProvider);
-    final encrypted = await cipher.encrypt(
-      Uint8List.fromList(utf8.encode(payload)),
+    final sealed = await sealMessage(
+      cipher,
+      payload,
+      extra: ref.read(extraEncryptionProvider).contains(chatId),
     );
     final outbound = Envelope(
       id: _newId(),
       chatId: chatId,
       sender: localUserId,
       createdAt: DateTime.now().toUtc(),
-      ciphertext: base64Encode(encrypted),
+      ciphertext: base64Encode(sealed),
       status: EnvelopeStatus.pending,
     );
     if (attachment != null) {
@@ -320,10 +341,12 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     if (trimmed.isEmpty) return;
     final repository = ref.read(envelopeRepositoryProvider);
     final cipher = ref.read(sessionCipherProvider);
-    final encrypted = await cipher.encrypt(
-      Uint8List.fromList(utf8.encode(trimmed)),
+    final sealed = await sealMessage(
+      cipher,
+      trimmed,
+      extra: ref.read(extraEncryptionProvider).contains(chatId),
     );
-    await repository.updateCiphertext(id, base64Encode(encrypted));
+    await repository.updateCiphertext(id, base64Encode(sealed));
     ref.read(localMediaProvider.notifier).remove(id);
     state = AsyncData(await _decode(await repository.listAll(), cipher));
   }
@@ -341,15 +364,17 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     if (targetChatId == chatId) return;
     final repository = ref.read(envelopeRepositoryProvider);
     final cipher = ref.read(sessionCipherProvider);
-    final encrypted = await cipher.encrypt(
-      Uint8List.fromList(utf8.encode(_payloadOf(message))),
+    final sealed = await sealMessage(
+      cipher,
+      _payloadOf(message),
+      extra: ref.read(extraEncryptionProvider).contains(targetChatId),
     );
     final copy = Envelope(
       id: _newId(),
       chatId: targetChatId,
       sender: localUserId,
       createdAt: DateTime.now().toUtc(),
-      ciphertext: base64Encode(encrypted),
+      ciphertext: base64Encode(sealed),
       status: EnvelopeStatus.sent,
     );
     final media = ref.read(localMediaProvider)[message.envelope.id];
@@ -369,8 +394,14 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     final mine = rows.where((row) => row.chatId == chatId);
     final messages = <DisplayMessage>[];
     for (final envelope in mine) {
+      final opened = await _openEnvelope(cipher, envelope);
       messages.add(
-        _toDisplay(envelope, await _mockDisplayText(cipher, envelope), catalog),
+        _toDisplay(
+          envelope,
+          opened.text,
+          catalog,
+          extraLayer: opened.extraLayer,
+        ),
       );
     }
     return messages;
@@ -380,14 +411,16 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
 DisplayMessage _toDisplay(
   Envelope envelope,
   String plain,
-  Map<String, LocalAttachment> catalog,
-) {
+  Map<String, LocalAttachment> catalog, {
+  bool extraLayer = false,
+}) {
   final media = catalog[envelope.id];
   if (plain == wallSmileyPayload) {
     return DisplayMessage(
       envelope: envelope,
       mockDisplayText: '',
       kind: MockKind.wallSmiley,
+      extraLayer: extraLayer,
     );
   }
   if (plain == filePayload) {
@@ -398,6 +431,7 @@ DisplayMessage _toDisplay(
       mockFileName: media?.name ?? 'Файл',
       mockSizeBytes: media?.bytes?.length ?? 0,
       mockBytes: media?.bytes,
+      extraLayer: extraLayer,
     );
   }
   if (plain == voicePayload) {
@@ -408,9 +442,14 @@ DisplayMessage _toDisplay(
       mockDuration: media?.duration ?? Duration.zero,
       mockBytes: media?.bytes,
       mockMimeType: media?.mimeType,
+      extraLayer: extraLayer,
     );
   }
-  return DisplayMessage(envelope: envelope, mockDisplayText: plain);
+  return DisplayMessage(
+    envelope: envelope,
+    mockDisplayText: plain,
+    extraLayer: extraLayer,
+  );
 }
 
 String _payloadOf(DisplayMessage message) {
@@ -483,12 +522,14 @@ final threadProvider =
       ThreadNotifier.new,
     );
 
-Future<String> _mockDisplayText(SessionCipher cipher, Envelope envelope) async {
+Future<OpenedMessage> _openEnvelope(
+  SessionCipher cipher,
+  Envelope envelope,
+) async {
   try {
-    final plain = await cipher.decrypt(base64Decode(envelope.ciphertext));
-    return utf8.decode(plain);
+    return await openMessage(cipher, envelope.ciphertext);
   } on Object {
-    return neutralPreview;
+    return const OpenedMessage(text: neutralPreview, extraLayer: false);
   }
 }
 

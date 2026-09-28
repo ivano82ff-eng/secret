@@ -162,6 +162,66 @@ void main() {
     await _unmount(tester);
   });
 
+  testWidgets('extra encryption toggles the lock on one chat', (tester) async {
+    await _pumpApp(tester, seedDemo: true, size: const Size(1100, 800));
+    await tester.tap(find.byKey(const Key('chat-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('chat-lock-chat-marina')), findsNothing);
+    expect(find.byKey(const Key('lock-wallpaper')), findsNothing);
+    expect(find.byKey(const Key('thread-wallpaper')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('chat-menu-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('extra-encryption-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const Key('chat-lock-chat-marina')), findsOneWidget);
+    expect(find.byKey(const Key('chat-lock-chat-ilya')), findsNothing);
+    expect(find.byKey(const Key('chat-lock-chat-kira')), findsNothing);
+    final lockWallpaper = find.byKey(const Key('lock-wallpaper'));
+    expect(lockWallpaper, findsOneWidget);
+    expect(find.byKey(const Key('thread-wallpaper')), findsNothing);
+    final list = find.byKey(const Key('chat-chat-ilya'));
+    expect(find.descendant(of: lockWallpaper, matching: list), findsNothing);
+    expect(
+      tester.getRect(lockWallpaper).overlaps(tester.getRect(list)),
+      isFalse,
+    );
+    expect(
+      tester.getRect(lockWallpaper).left,
+      greaterThanOrEqualTo(tester.getRect(list).right - 1),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('composer')),
+      'Секретная встреча',
+    );
+    await tester.tap(find.byKey(const Key('send')));
+    await _flush(tester);
+    expect(find.text('Секретная встреча'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((widget) {
+        final key = widget.key;
+        return key is ValueKey<String> && key.value.startsWith('bubble-lock-');
+      }),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('chat-menu-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('extra-encryption-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('chat-lock-chat-marina')), findsNothing);
+    expect(find.byKey(const Key('lock-wallpaper')), findsNothing);
+    expect(find.byKey(const Key('thread-wallpaper')), findsOneWidget);
+    await _unmount(tester);
+  });
+
   testWidgets('edit dialog shows a long message and dismisses outside', (
     tester,
   ) async {

@@ -17,6 +17,7 @@ class DisplayMessage {
     this.mockDuration,
     this.mockBytes,
     this.mockMimeType,
+    this.extraLayer = false,
   });
 
   final Envelope envelope;
@@ -33,4 +34,7 @@ class DisplayMessage {
   /// Local bytes for playback or a file that was not uploaded.
   final Uint8List? mockBytes;
   final String? mockMimeType;
+
+  /// True when this envelope's ciphertext is a lock-picture PNG.
+  final bool extraLayer;
 }
