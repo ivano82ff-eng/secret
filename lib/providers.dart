@@ -14,13 +14,20 @@ import 'data/app_database.dart';
 import 'data/envelope_repository.dart';
 import 'demo/demo_seeder.dart';
 import 'directory/peers.dart';
+import 'media/attachment_picker.dart';
+import 'media/device_voice.dart';
+import 'media/voice_recorder.dart';
 import 'models/display_message.dart';
 import 'models/envelope.dart';
+import 'models/payload_markers.dart';
 import 'models/server_models.dart';
+import 'notifications/neutral_notifications.dart';
+import 'session/local_media.dart';
+import 'session/notices.dart';
 import 'transport/messenger_transport.dart';
 import 'transport/mock_messenger_transport.dart';
 
-enum PreviewMode { normal, empty, loading, error, threadError }
+enum PreviewMode { normal, empty, loading, error, threadError, notify }
 
 class ChatSummary {
   const ChatSummary({
@@ -47,6 +54,7 @@ final previewModeProvider = Provider<PreviewMode>((ref) {
     'loading' => PreviewMode.loading,
     'error' => PreviewMode.error,
     'thread-error' => PreviewMode.threadError,
+    'notify' => PreviewMode.notify,
     _ => PreviewMode.normal,
   };
 });
@@ -75,7 +83,7 @@ final privateKeyVaultProvider = Provider<PrivateKeyVault>((ref) {
   return FlutterSecurePrivateKeyVault(const FlutterSecureStorage());
 });
 
-final identityProvider = FutureProvider<IdentityPublicInfo>((ref) async {
+final identityProvider = FutureProvider<IdentityLoad>((ref) async {
   final store = IdentityKeyStore(vault: ref.watch(privateKeyVaultProvider));
   try {
     return await store.loadOrCreate();
@@ -88,7 +96,41 @@ final identityProvider = FutureProvider<IdentityPublicInfo>((ref) async {
 final sessionProvider = FutureProvider<RegistrationResult>((ref) async {
   final identity = await ref.watch(identityProvider.future);
   final transport = ref.watch(transportProvider);
-  return transport.registerDevice(_stubRegistration(identity));
+  return transport.registerDevice(_stubRegistration(identity.info));
+});
+
+class IntroVisible extends AsyncNotifier<bool> {
+  @override
+  Future<bool> build() async {
+    final identity = await ref.watch(identityProvider.future);
+    return identity.freshlyCreated;
+  }
+
+  void dismiss() => state = const AsyncData(false);
+}
+
+final introVisibleProvider = AsyncNotifierProvider<IntroVisible, bool>(
+  IntroVisible.new,
+);
+
+final attachmentPickerProvider = Provider<AttachmentPicker>((ref) {
+  return DeviceAttachmentPicker();
+});
+
+final voiceRecorderProvider = Provider<VoiceRecorder>((ref) {
+  final recorder = DeviceVoiceRecorder();
+  ref.onDispose(recorder.dispose);
+  return recorder;
+});
+
+final voicePlayerProvider = Provider<VoicePlayer>((ref) {
+  final player = DeviceVoicePlayer();
+  ref.onDispose(player.dispose);
+  return player;
+});
+
+final neutralNotificationsProvider = Provider<NeutralNotifications>((ref) {
+  return createNeutralNotifications();
 });
 
 final demoSeederProvider = Provider<DemoSeeder>((ref) {
@@ -178,25 +220,62 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
   Future<void> send(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
+    await _sendPayload(trimmed);
+  }
+
+  Future<void> sendWallSmiley() => _sendPayload(wallSmileyPayload);
+
+  Future<void> sendFile(PickedLocalFile file) {
+    return _sendPayload(
+      filePayload,
+      attachment: LocalAttachment(
+        kind: MockKind.file,
+        name: file.name,
+        bytes: file.bytes,
+      ),
+    );
+  }
+
+  Future<void> sendVoice(VoiceClip clip) {
+    return _sendPayload(
+      voicePayload,
+      attachment: LocalAttachment(
+        kind: MockKind.voice,
+        bytes: clip.bytes,
+        duration: clip.duration,
+        mimeType: clip.mimeType,
+      ),
+    );
+  }
+
+  Future<void> _sendPayload(
+    String payload, {
+    LocalAttachment? attachment,
+  }) async {
     final repository = ref.read(envelopeRepositoryProvider);
     final cipher = ref.read(sessionCipherProvider);
     final transport = ref.read(transportProvider);
-    final payload = await cipher.encrypt(
-      Uint8List.fromList(utf8.encode(trimmed)),
+    final encrypted = await cipher.encrypt(
+      Uint8List.fromList(utf8.encode(payload)),
     );
     final outbound = Envelope(
       id: _newId(),
       chatId: chatId,
       sender: localUserId,
       createdAt: DateTime.now().toUtc(),
-      ciphertext: base64Encode(payload),
+      ciphertext: base64Encode(encrypted),
       status: EnvelopeStatus.pending,
     );
+    if (attachment != null) {
+      ref.read(localMediaProvider.notifier).put(outbound.id, attachment);
+    }
     await repository.insert(outbound);
     final reply = await transport.send(outbound);
     await repository.updateStatus(outbound.id, EnvelopeStatus.sent);
     if (reply != null) {
-      await repository.insert(reply);
+      await ref
+          .read(inboundHubProvider.notifier)
+          .acceptInbound(reply, refreshOpenThread: false);
     }
     state = AsyncData(await _decode(await repository.listAll(), cipher));
     ref.invalidate(chatListProvider);
@@ -206,19 +285,109 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     List<Envelope> rows,
     SessionCipher cipher,
   ) async {
+    final catalog = ref.read(localMediaProvider);
     final mine = rows.where((row) => row.chatId == chatId);
     final messages = <DisplayMessage>[];
     for (final envelope in mine) {
       messages.add(
-        DisplayMessage(
-          envelope: envelope,
-          mockDisplayText: await _mockDisplayText(cipher, envelope),
-        ),
+        _toDisplay(envelope, await _mockDisplayText(cipher, envelope), catalog),
       );
     }
     return messages;
   }
 }
+
+DisplayMessage _toDisplay(
+  Envelope envelope,
+  String plain,
+  Map<String, LocalAttachment> catalog,
+) {
+  final media = catalog[envelope.id];
+  if (plain == wallSmileyPayload) {
+    return DisplayMessage(
+      envelope: envelope,
+      mockDisplayText: '',
+      kind: MockKind.wallSmiley,
+    );
+  }
+  if (plain == filePayload) {
+    return DisplayMessage(
+      envelope: envelope,
+      mockDisplayText: '',
+      kind: MockKind.file,
+      mockFileName: media?.name ?? 'Файл',
+      mockSizeBytes: media?.bytes?.length ?? 0,
+      mockBytes: media?.bytes,
+    );
+  }
+  if (plain == voicePayload) {
+    return DisplayMessage(
+      envelope: envelope,
+      mockDisplayText: '',
+      kind: MockKind.voice,
+      mockDuration: media?.duration ?? Duration.zero,
+      mockBytes: media?.bytes,
+      mockMimeType: media?.mimeType,
+    );
+  }
+  return DisplayMessage(envelope: envelope, mockDisplayText: plain);
+}
+
+class InboundHub extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  var _previewSent = false;
+
+  Future<void> maybeAnnouncePreview() async {
+    if (_previewSent || ref.read(previewModeProvider) != PreviewMode.notify) {
+      return;
+    }
+    _previewSent = true;
+    await announceFromPeer('chat-marina');
+  }
+
+  Future<void> announceFromPeer(String chatId) async {
+    final cipher = ref.read(sessionCipherProvider);
+    final encrypted = await cipher.encrypt(utf8.encode('Принято.'));
+    final peer = peerByChatId(chatId);
+    await acceptInbound(
+      Envelope(
+        id: _newId(),
+        chatId: chatId,
+        sender: peer.userId,
+        createdAt: DateTime.now().toUtc(),
+        ciphertext: base64Encode(encrypted),
+        status: EnvelopeStatus.received,
+      ),
+    );
+  }
+
+  Future<void> acceptInbound(
+    Envelope envelope, {
+    bool refreshOpenThread = true,
+  }) async {
+    await ref.read(envelopeRepositoryProvider).insert(envelope);
+    _consider(envelope);
+    ref.invalidate(chatListProvider);
+    if (refreshOpenThread && envelope.chatId == ref.read(openThreadProvider)) {
+      ref.invalidate(threadProvider(envelope.chatId));
+    }
+    state++;
+  }
+
+  void _consider(Envelope envelope) {
+    if (envelope.sender == localUserId) return;
+    if (envelope.chatId == ref.read(openThreadProvider)) return;
+    final name = peerByChatIdOrNull(envelope.chatId)?.name ?? 'Собеседник';
+    ref
+        .read(noticeProvider.notifier)
+        .show(InboundNotice(chatId: envelope.chatId, senderName: name));
+    unawaited(ref.read(neutralNotificationsProvider).showNewMessage(name));
+  }
+}
+
+final inboundHubProvider = NotifierProvider<InboundHub, int>(InboundHub.new);
 
 final threadProvider =
     AsyncNotifierProvider.family<ThreadNotifier, List<DisplayMessage>, String>(

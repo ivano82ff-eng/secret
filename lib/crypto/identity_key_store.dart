@@ -12,6 +12,15 @@ class IdentityPublicInfo {
   final String publicKeyBase64;
 }
 
+class IdentityLoad {
+  const IdentityLoad({required this.info, required this.freshlyCreated});
+
+  final IdentityPublicInfo info;
+
+  /// True only when this call generated a new private key.
+  final bool freshlyCreated;
+}
+
 class IdentityKeyStore {
   IdentityKeyStore({required this.vault, X25519? keyExchange})
     : algorithm = keyExchange ?? X25519();
@@ -19,17 +28,17 @@ class IdentityKeyStore {
   final PrivateKeyVault vault;
   final X25519 algorithm;
 
-  Future<IdentityPublicInfo> loadOrCreate() async {
+  Future<IdentityLoad> loadOrCreate() async {
     final existing = await vault.readPrivateKey();
     if (existing != null && existing.isNotEmpty) {
       final pair = await algorithm.newKeyPairFromSeed(base64Decode(existing));
-      return _publicInfo(pair);
+      return IdentityLoad(info: await _publicInfo(pair), freshlyCreated: false);
     }
 
     final created = await algorithm.newKeyPair();
     final privateBytes = await created.extractPrivateKeyBytes();
     await vault.writePrivateKey(base64Encode(privateBytes));
-    return _publicInfo(created);
+    return IdentityLoad(info: await _publicInfo(created), freshlyCreated: true);
   }
 
   Future<IdentityPublicInfo> _publicInfo(KeyPair pair) async {

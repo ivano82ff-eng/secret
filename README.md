@@ -20,7 +20,13 @@ flutter run -d web-server --web-hostname 127.0.0.1 --web-port 43123
 
 Open http://127.0.0.1:43123
 
+The first launch creates an X25519 identity, calls the mock `POST /v1/devices`, and shows the issued `userId`. That id is what you send to the other person. A later launch with a stored key opens the chat list. There is no password.
+
 The chat list starts with three local conversations. Sending in a thread appends your envelope and a mock inbound reply. The list preview stays the neutral placeholder «Сообщение».
+
+The composer has an emoji picker and one original animated smiley (a face against a brick wall). Files and short voice messages stay on this device: the bubble shows a name or a duration, and the wire envelope stays ciphertext only. If the microphone is blocked, the chat still sends text.
+
+When a mock inbound message arrives for a thread that is not open, an in-app banner shows the sender name and «Новое сообщение», without the message body. On the web, the same neutral text is used for a local notification when the browser allows it.
 
 Preview states (web):
 
@@ -28,6 +34,7 @@ Preview states (web):
 - `/?preview=loading` — list stays on the loading state
 - `/?preview=error` — list error with retry
 - `/?preview=thread-error` — opening a thread fails
+- `/?preview=notify` — after the chat list opens, one inbound banner from Марина
 
 ## Server contract
 

@@ -1,0 +1,127 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+Future<void> copyUserId(BuildContext context, String userId) async {
+  await Clipboard.setData(ClipboardData(text: userId));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context)
+      .showSnackBar(const SnackBar(content: Text('Идентификатор скопирован')));
+}
+
+class AuthScreen extends StatelessWidget {
+  const AuthScreen({super.key, required this.userId, required this.onContinue});
+
+  final String userId;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(
+                    Icons.lock_outline,
+                    size: 40,
+                    color: Color(0xFF1B3A31),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Ваш идентификатор',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF1B3A31),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Это идентификатор, который вы отправляете собеседнику. Идентификатор устройства — не адрес.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+                  ),
+                  const SizedBox(height: 20),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE4DDD2)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 18,
+                      ),
+                      child: SelectableText(
+                        userId,
+                        key: const Key('user-id-value'),
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    key: const Key('copy-user-id'),
+                    onPressed: () => copyUserId(context, userId),
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Скопировать'),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    key: const Key('enter-chats'),
+                    onPressed: onContinue,
+                    child: const Text('К чатам'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+void showAccountDialog(BuildContext context, String userId) {
+  showDialog<void>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Ваш идентификатор'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SelectableText(userId, key: const Key('account-user-id')),
+            const SizedBox(height: 12),
+            const Text(
+              'Его отправляют собеседнику. Идентификатор устройства — не адрес.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            key: const Key('account-copy'),
+            onPressed: () => copyUserId(context, userId),
+            child: const Text('Скопировать'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Закрыть'),
+          ),
+        ],
+      );
+    },
+  );
+}
