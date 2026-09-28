@@ -98,9 +98,7 @@ class MessengerHome extends ConsumerWidget {
             ),
           );
         }
-        final title = selected == null
-            ? null
-            : displayTitle(selected, names);
+        final title = selected == null ? null : displayTitle(selected, names);
         return Scaffold(
           body: SafeArea(
             child: Row(
@@ -123,7 +121,7 @@ class MessengerHome extends ConsumerWidget {
                           child: ChatListBody(
                             selectedChatId: selected,
                             onOpen: (chatId) =>
-                              _open(context, ref, chatId, wide: wide),
+                                _open(context, ref, chatId, wide: wide),
                           ),
                         ),
                       ],
@@ -132,23 +130,29 @@ class MessengerHome extends ConsumerWidget {
                 ),
                 const VerticalDivider(width: 1),
                 Expanded(
-                  child: selected == null
-                      ? const StatusPlaceholder()
-                      : Column(
-                          children: [
-                            _PaneHeader(
-                              title: title!,
-                              trailing: IconButton(
-                                tooltip: 'Число безопасности',
-                                onPressed: () =>
-                                    _openSafety(context, ref, selected),
-                                icon: const Icon(Icons.verified_user_outlined),
+                  child: ClipRect(
+                    child: selected == null
+                        ? const StatusPlaceholder()
+                        : Column(
+                            children: [
+                              _PaneHeader(
+                                title: title!,
+                                trailing: IconButton(
+                                  tooltip: 'Число безопасности',
+                                  onPressed: () =>
+                                      _openSafety(context, ref, selected),
+                                  icon: const Icon(
+                                    Icons.verified_user_outlined,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const Divider(height: 1),
-                            Expanded(child: ConversationBody(chatId: selected)),
-                          ],
-                        ),
+                              const Divider(height: 1),
+                              Expanded(
+                                child: ConversationBody(chatId: selected),
+                              ),
+                            ],
+                          ),
+                  ),
                 ),
               ],
             ),
@@ -281,4 +285,3 @@ class _AddPersonButton extends StatelessWidget {
     );
   }
 }
-

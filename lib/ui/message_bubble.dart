@@ -107,7 +107,11 @@ class _MessageActions extends ConsumerWidget {
       padding: EdgeInsets.zero,
       icon: Icon(Icons.more_horiz, color: meta, size: 18),
       iconSize: 18,
-      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+      style: IconButton.styleFrom(
+        minimumSize: const Size(28, 28),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: EdgeInsets.zero,
+      ),
       onSelected: (action) => _run(context, ref, action),
       itemBuilder: (context) => const [
         PopupMenuItem(value: 'edit', child: Text('Изменить')),
@@ -120,13 +124,12 @@ class _MessageActions extends ConsumerWidget {
   }
 
   Future<void> _run(BuildContext context, WidgetRef ref, String action) async {
-    final thread = ref.read(
-      threadProvider(message.envelope.chatId).notifier,
-    );
+    final thread = ref.read(threadProvider(message.envelope.chatId).notifier);
     switch (action) {
       case 'edit':
         final next = await showDialog<String>(
           context: context,
+          barrierDismissible: true,
           builder: (context) => _EditDialog(initial: _snippet(message)),
         );
         if (next == null) return;
@@ -213,21 +216,32 @@ class _EditDialogState extends State<_EditDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final minWidth = width < 448 ? (width - 80).clamp(0, 420).toDouble() : 420.0;
     return AlertDialog(
+      scrollable: true,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      constraints: BoxConstraints(minWidth: minWidth, maxWidth: 560),
       title: const Text('Изменить'),
       content: TextField(
         key: const Key('edit-field'),
         controller: _controller,
         autofocus: true,
+        keyboardType: TextInputType.multiline,
         minLines: 1,
-        maxLines: 4,
+        maxLines: null,
+        style: const TextStyle(fontSize: 20, height: 1.35),
+        decoration: const InputDecoration(
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.all(16),
+        ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Отмена'),
         ),
-        TextButton(
+        FilledButton(
           key: const Key('edit-save'),
           onPressed: () => Navigator.of(context).pop(_controller.text),
           child: const Text('Сохранить'),

@@ -17,6 +17,7 @@ import 'package:secret/media/voice_recorder.dart';
 import 'package:secret/models/payload_markers.dart';
 import 'package:secret/providers.dart';
 import 'package:secret/transport/mock_messenger_transport.dart';
+import 'package:secret/ui/chat_wallpaper.dart';
 import 'package:secret/ui/wall_smiley.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -104,6 +105,94 @@ void main() {
 
     final field = tester.widget<TextField>(find.byKey(const Key('composer')));
     expect(field.controller?.text, contains('😀'));
+    await _unmount(tester);
+  });
+
+  testWidgets('sending an emoji closes the picker', (tester) async {
+    await _pumpApp(tester);
+    await _openAlexey(tester);
+    await tester.tap(find.byKey(const Key('emoji-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('emoji-panel')), findsOneWidget);
+
+    await tester.tap(find.text('😀').first);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('send')));
+    await _flush(tester);
+
+    expect(find.byKey(const Key('emoji-panel')), findsNothing);
+    expect(find.textContaining('😀'), findsWidgets);
+    final field = tester.widget<TextField>(find.byKey(const Key('composer')));
+    expect(field.focusNode?.hasFocus, isTrue);
+    await _unmount(tester);
+  });
+
+  testWidgets('wallpaper is not an ancestor that spans the list', (
+    tester,
+  ) async {
+    await _pumpApp(tester, seedDemo: true, size: const Size(1100, 800));
+    await tester.tap(find.byKey(const Key('chat-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final list = find.byKey(const Key('chat-chat-marina'));
+    final wallpaper = find.byType(ChatWallpaper);
+    expect(wallpaper, findsOneWidget);
+    expect(find.descendant(of: wallpaper, matching: list), findsNothing);
+
+    var spansList = false;
+    tester.element(list).visitAncestorElements((ancestor) {
+      if (ancestor.widget is ChatWallpaper) spansList = true;
+      return true;
+    });
+    expect(spansList, isFalse);
+
+    final wallpaperRect = tester.getRect(wallpaper);
+    final listRect = tester.getRect(list);
+    expect(wallpaperRect.overlaps(listRect), isFalse);
+    expect(wallpaperRect.left, greaterThanOrEqualTo(listRect.right - 1));
+    expect(
+      find.ancestor(
+        of: find.byKey(const Key('thread-wallpaper')),
+        matching: find.byType(ClipRect),
+      ),
+      findsWidgets,
+    );
+    await _unmount(tester);
+  });
+
+  testWidgets('edit dialog shows a long message and dismisses outside', (
+    tester,
+  ) async {
+    const line = 'Видно целиком в окне правки.';
+    final long = List.filled(8, line).join('\n');
+    await _pumpApp(tester);
+    await _openAlexey(tester);
+    await tester.enterText(find.byKey(const Key('composer')), long);
+    await tester.tap(find.byKey(const Key('send')));
+    await _flush(tester);
+
+    await tester.tap(find.byTooltip('Действия с сообщением'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Изменить'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final field = tester.widget<TextField>(find.byKey(const Key('edit-field')));
+    expect(field.maxLines, isNull);
+    expect(field.controller?.text, long);
+    expect(
+      tester.getSize(find.byKey(const Key('edit-field'))).height,
+      greaterThan(180),
+    );
+
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('edit-field')), findsNothing);
+    expect(find.textContaining(line), findsWidgets);
     await _unmount(tester);
   });
 

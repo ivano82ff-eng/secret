@@ -9,9 +9,12 @@ class ChatWallpaper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = SecretPalette.of(context);
-    return CustomPaint(
-      painter: _WallpaperPainter(palette),
-      child: const SizedBox.expand(),
+    return ClipRect(
+      child: CustomPaint(
+        key: const Key('thread-wallpaper'),
+        painter: _WallpaperPainter(palette),
+        child: const SizedBox.expand(),
+      ),
     );
   }
 }
@@ -23,6 +26,8 @@ class _WallpaperPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, Paint()..color = palette.wallpaperBase);
     final night = palette.night;
     _blob(
@@ -79,6 +84,7 @@ class _WallpaperPainter extends CustomPainter {
       false,
       arc,
     );
+    canvas.restore();
   }
 
   void _blob(

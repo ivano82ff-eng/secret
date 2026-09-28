@@ -45,6 +45,14 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
     super.dispose();
   }
 
+  void _showTextComposer() {
+    _pickerOpen = false;
+    _recording = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
   void _quote(String snippet) {
     _controller.value = TextEditingValue(
       text: snippet,
@@ -56,10 +64,14 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
   Future<void> _send() async {
     final text = _controller.text;
     if (text.trim().isEmpty || _sending) return;
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _pickerOpen = false;
+    });
     _controller.clear();
     try {
       await ref.read(threadProvider(widget.chatId).notifier).send(text);
+      if (mounted) setState(_showTextComposer);
     } catch (error) {
       debugPrint('send failed (${error.runtimeType})');
       if (mounted) {
@@ -76,6 +88,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
     setState(() => _pickerOpen = false);
     try {
       await ref.read(threadProvider(widget.chatId).notifier).sendWallSmiley();
+      if (mounted) setState(_showTextComposer);
     } catch (error) {
       debugPrint('smiley failed (${error.runtimeType})');
     }
@@ -86,6 +99,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
     if (picked == null || !mounted) return;
     try {
       await ref.read(threadProvider(widget.chatId).notifier).sendFile(picked);
+      if (mounted) setState(_showTextComposer);
     } catch (error) {
       debugPrint('file failed (${error.runtimeType})');
       if (mounted) {
@@ -109,6 +123,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
         }
         setState(() => _micError = null);
         await ref.read(threadProvider(widget.chatId).notifier).sendVoice(clip);
+        if (mounted) setState(_showTextComposer);
       } on MicrophoneDenied {
         if (mounted) {
           setState(
@@ -161,43 +176,47 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
     return Column(
       children: [
         Expanded(
-          child: Stack(
-            children: [
-              const ChatWallpaper(),
-              thread.when(
-                skipLoadingOnReload: true,
-                loading: () => const StatusPanel(
-                  icon: Icons.hourglass_top,
-                  title: 'Открываем диалог',
-                  body: 'Достаём конверты из локального кэша.',
-                ),
-                error: (error, stackTrace) => StatusPanel(
-                  icon: Icons.error_outline,
-                  title: 'Не удалось открыть диалог',
-                  body: 'История не прочиталась. Повторите попытку.',
-                  actionLabel: 'Повторить',
-                  onAction: () => ref.invalidate(threadProvider(widget.chatId)),
-                ),
-                data: (messages) {
-                  if (messages.isEmpty) {
-                    return const StatusPanel(
-                      icon: Icons.chat_bubble_outline,
-                      title: 'Напишите первое сообщение',
-                      body: 'Оно сохранится как зашифрованный конверт. Ответ придёт локально, без сервера.',
+          child: ClipRect(
+            child: Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                const ChatWallpaper(),
+                thread.when(
+                  skipLoadingOnReload: true,
+                  loading: () => const StatusPanel(
+                    icon: Icons.hourglass_top,
+                    title: 'Открываем диалог',
+                    body: 'Достаём конверты из локального кэша.',
+                  ),
+                  error: (error, stackTrace) => StatusPanel(
+                    icon: Icons.error_outline,
+                    title: 'Не удалось открыть диалог',
+                    body: 'История не прочиталась. Повторите попытку.',
+                    actionLabel: 'Повторить',
+                    onAction: () =>
+                        ref.invalidate(threadProvider(widget.chatId)),
+                  ),
+                  data: (messages) {
+                    if (messages.isEmpty) {
+                      return const StatusPanel(
+                        icon: Icons.chat_bubble_outline,
+                        title: 'Напишите первое сообщение',
+                        body: 'Оно сохранится как зашифрованный конверт. Ответ придёт локально, без сервера.',
+                      );
+                    }
+                    return ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[messages.length - 1 - index];
+                        return MessageBubble(message: message, onQuote: _quote);
+                      },
                     );
-                  }
-                  return ListView.builder(
-                    reverse: true,
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      final message = messages[messages.length - 1 - index];
-                      return MessageBubble(message: message, onQuote: _quote);
-                    },
-                  );
-                },
-              ),
-            ],
+                  },
+                ),
+              ],
+            ),
           ),
         ),
         if (_pickerOpen)
