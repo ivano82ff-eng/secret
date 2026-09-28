@@ -38,14 +38,14 @@ class SecretPalette extends ThemeExtension<SecretPalette> {
 
   /// Opaque column behind chat names. Darker than the thread wallpaper.
   Color get listSurface =>
-      night ? const Color(0xFF070C10) : const Color(0xFFB7C2BC);
+      night ? const Color(0xFF070B10) : const Color(0xFFC3D0DC);
 
-  /// Warm row used only while extra encryption is on for that chat.
+  /// Cool row used only while extra encryption is on for that chat.
   Color extraRow({required bool selected}) {
     if (night) {
-      return selected ? const Color(0xFF4E4032) : const Color(0xFF3A3026);
+      return selected ? const Color(0xFF243E5C) : const Color(0xFF1A3048);
     }
-    return selected ? const Color(0xFFD7B48A) : const Color(0xFFE4C9A4);
+    return selected ? const Color(0xFFB9D3EA) : const Color(0xFFC9DCEC);
   }
 
   static SecretPalette of(BuildContext context) {
@@ -111,36 +111,36 @@ class SecretPalette extends ThemeExtension<SecretPalette> {
 
 const _dayPalette = SecretPalette(
   night: false,
-  wallpaperBase: Color(0xFFD5E6DC),
-  blobA: Color(0xFFF4CDBB),
-  blobB: Color(0xFF8FC4AE),
-  blobC: Color(0xFFF0D98A),
-  outgoing: Color(0xFFD8F3E6),
-  incoming: Color(0xFFFFFCF8),
-  outgoingInk: Color(0xFF14352C),
-  incomingInk: Color(0xFF1C2421),
-  outgoingMeta: Color(0xFF3E6B5C),
-  incomingMeta: Color(0xFF6E7A74),
-  composer: Color(0xFFF7FAF8),
-  quiet: Color(0xFF6E7A74),
+  wallpaperBase: Color(0xFFD4E4F4),
+  blobA: Color(0xFF7EB6E8),
+  blobB: Color(0xFF9AA8B5),
+  blobC: Color(0xFF4C8DCE),
+  outgoing: Color(0xFFD6EBFA),
+  incoming: Color(0xFFF7F9FB),
+  outgoingInk: Color(0xFF12202C),
+  incomingInk: Color(0xFF1A242E),
+  outgoingMeta: Color(0xFF4E6E88),
+  incomingMeta: Color(0xFF7A8794),
+  composer: Color(0xFFF3F6F9),
+  quiet: Color(0xFF7A8794),
   field: Color(0xFFFFFFFF),
 );
 
 const _nightPalette = SecretPalette(
   night: true,
-  wallpaperBase: Color(0xFF0E171E),
-  blobA: Color(0xFF1C6B5C),
-  blobB: Color(0xFF31457A),
-  blobC: Color(0xFF6B4638),
-  outgoing: Color(0xFF1C4E41),
-  incoming: Color(0xFF24313A),
-  outgoingInk: Color(0xFFE7F6EF),
-  incomingInk: Color(0xFFE6EEEA),
-  outgoingMeta: Color(0xFF9BB8AD),
-  incomingMeta: Color(0xFF8A9892),
-  composer: Color(0xFF162028),
-  quiet: Color(0xFF8A9892),
-  field: Color(0xFF1C2830),
+  wallpaperBase: Color(0xFF0E1621),
+  blobA: Color(0xFF2B5278),
+  blobB: Color(0xFF3D4F61),
+  blobC: Color(0xFF1B3A56),
+  outgoing: Color(0xFF2B5278),
+  incoming: Color(0xFF182533),
+  outgoingInk: Color(0xFFE8F1F8),
+  incomingInk: Color(0xFFE6EEF4),
+  outgoingMeta: Color(0xFF8EABC4),
+  incomingMeta: Color(0xFF8A97A3),
+  composer: Color(0xFF17212B),
+  quiet: Color(0xFF8A97A3),
+  field: Color(0xFF1C2733),
 );
 
 ThemeData secretTheme() => _theme(Brightness.light, _dayPalette);
@@ -151,25 +151,28 @@ ThemeData _theme(Brightness brightness, SecretPalette palette) {
   final scheme =
       ColorScheme.fromSeed(
         seedColor: brightness == Brightness.dark
-            ? const Color(0xFF8FCBB8)
-            : const Color(0xFF1F6B57),
+            ? const Color(0xFF6AB2F2)
+            : const Color(0xFF3390EC),
         brightness: brightness,
         surface: brightness == Brightness.dark
-            ? const Color(0xFF121A20)
-            : const Color(0xFFF3F6F4),
+            ? const Color(0xFF17212B)
+            : const Color(0xFFE7EEF4),
       ).copyWith(
         primary: brightness == Brightness.dark
-            ? const Color(0xFF8FCBB8)
-            : const Color(0xFF1F6B57),
+            ? const Color(0xFF6AB2F2)
+            : const Color(0xFF3390EC),
         onPrimary: brightness == Brightness.dark
-            ? const Color(0xFF10211B)
+            ? const Color(0xFF0B1A28)
             : Colors.white,
+        secondary: brightness == Brightness.dark
+            ? const Color(0xFF8AA0B4)
+            : const Color(0xFF5C7386),
         surface: brightness == Brightness.dark
-            ? const Color(0xFF121A20)
-            : const Color(0xFFF3F6F4),
+            ? const Color(0xFF17212B)
+            : const Color(0xFFE7EEF4),
         onSurface: brightness == Brightness.dark
-            ? const Color(0xFFE6EEEA)
-            : const Color(0xFF1C2421),
+            ? const Color(0xFFE6EEF4)
+            : const Color(0xFF1A242E),
       );
   return ThemeData(
     useMaterial3: true,

@@ -422,6 +422,25 @@ void main() {
     await _unmount(tester);
   });
 
+  testWidgets('wall smiley scrolls away from the top-left corner', (
+    tester,
+  ) async {
+    await _pumpApp(tester);
+    await _openAlexey(tester);
+    await tester.tap(find.byKey(const Key('emoji-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final before = tester.getTopLeft(find.byKey(const Key('wall-smiley')));
+
+    final panel = tester.getRect(find.byKey(const Key('emoji-panel')));
+    await tester.dragFrom(panel.center, const Offset(0, -180));
+    await tester.pump();
+
+    final after = tester.getTopLeft(find.byKey(const Key('wall-smiley')));
+    expect(after.dy, lessThan(before.dy - 40));
+    await _unmount(tester);
+  });
+
   testWidgets('switching chats closes the emoji picker', (tester) async {
     await _pumpApp(tester, seedDemo: true, size: const Size(1100, 800));
     await tester.tap(find.byKey(const Key('chat-chat-marina')));

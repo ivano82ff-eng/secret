@@ -63,8 +63,8 @@ class ChatListBody extends ConsumerWidget {
                 vertical: 6,
               ),
               leading: CircleAvatar(
-                backgroundColor: const Color(0xFF1B3A31),
-                foregroundColor: Colors.white,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 child: Text(chat.title.isEmpty ? '?' : chat.title[0]),
               ),
               title: Row(
@@ -75,8 +75,8 @@ class ChatListBody extends ConsumerWidget {
                       key: Key('chat-lock-${chat.chatId}'),
                       size: 16,
                       color: palette.night
-                          ? const Color(0xFFE6D2B0)
-                          : const Color(0xFF6B4E2E),
+                          ? const Color(0xFF8EBBDD)
+                          : const Color(0xFF2F6FA8),
                     ),
                     const SizedBox(width: 6),
                   ],

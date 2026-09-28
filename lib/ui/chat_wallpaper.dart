@@ -112,6 +112,7 @@ class _WallpaperPainter extends CustomPainter {
   }
 }
 
+/// Two or three translucent chat bubbles. Replaces the old lock tile.
 class _LockWallpaperPainter extends CustomPainter {
   _LockWallpaperPainter(this.palette);
 
@@ -121,48 +122,70 @@ class _LockWallpaperPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.clipRect(Offset.zero & size);
-    final base = palette.night
-        ? const Color(0xFF1A2433)
-        : const Color(0xFFD7DEE8);
-    canvas.drawRect(Offset.zero & size, Paint()..color = base);
-    final ink = palette.night
-        ? const Color(0xFFE4D2B0).withValues(alpha: 0.38)
-        : const Color(0xFF3D4E63).withValues(alpha: 0.32);
-    const step = 84.0;
-    for (var y = step / 2; y < size.height; y += step) {
-      for (var x = step / 2; x < size.width; x += step) {
-        _drawLock(canvas, Offset(x, y), 22, ink);
-      }
-    }
+    canvas.drawRect(Offset.zero & size, Paint()..color = palette.wallpaperBase);
+    final night = palette.night;
+    _bubble(
+      canvas,
+      size,
+      const Offset(0.28, 0.30),
+      0.72,
+      0.30,
+      palette.blobA,
+      night ? 0.38 : 0.30,
+      outgoing: true,
+    );
+    _bubble(
+      canvas,
+      size,
+      const Offset(0.74, 0.58),
+      0.46,
+      0.20,
+      palette.blobB,
+      night ? 0.32 : 0.24,
+      outgoing: false,
+    );
+    _bubble(
+      canvas,
+      size,
+      const Offset(0.36, 0.82),
+      0.28,
+      0.13,
+      palette.blobC,
+      night ? 0.28 : 0.22,
+      outgoing: true,
+    );
     canvas.restore();
   }
 
-  void _drawLock(Canvas canvas, Offset center, double extent, Color color) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = extent * 0.08
-      ..color = color;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: center + Offset(0, extent * 0.16),
-          width: extent * 0.7,
-          height: extent * 0.52,
-        ),
-        Radius.circular(extent * 0.08),
-      ),
-      paint,
+  void _bubble(
+    Canvas canvas,
+    Size size,
+    Offset anchor,
+    double widthFactor,
+    double heightFactor,
+    Color color,
+    double alpha, {
+    required bool outgoing,
+  }) {
+    final shortest = size.shortestSide;
+    final width = shortest * widthFactor;
+    final height = shortest * heightFactor;
+    final rect = Rect.fromCenter(
+      center: Offset(size.width * anchor.dx, size.height * anchor.dy),
+      width: width,
+      height: height,
     );
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: center + Offset(0, -extent * 0.02),
-        width: extent * 0.4,
-        height: extent * 0.42,
+    final round = Radius.circular(height * 0.42);
+    final tail = Radius.circular(height * 0.14);
+    canvas.drawRRect(
+      RRect.fromRectAndCorners(
+        rect,
+        topLeft: round,
+        topRight: round,
+        bottomLeft: outgoing ? round : tail,
+        bottomRight: outgoing ? tail : round,
       ),
-      3.15,
-      3.15,
-      false,
-      paint,
+      Paint()..color = color.withValues(alpha: alpha),
     );
   }
 
