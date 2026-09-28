@@ -11,6 +11,7 @@ import 'chat_list_body.dart';
 import 'conversation_body.dart';
 import 'inbound_banner.dart';
 import 'safety_number_screen.dart';
+import 'theme_toggle.dart';
 
 const wideBreakpoint = 840.0;
 
@@ -79,7 +80,12 @@ class MessengerHome extends ConsumerWidget {
           return Scaffold(
             appBar: AppBar(
               title: const Text('Чаты'),
-              actions: const [_AccountButton(), _LockMark()],
+              actions: const [
+                _AddPersonButton(),
+                ThemeToggle(),
+                _AccountButton(),
+                _LockMark(),
+              ],
             ),
             body: ChatListBody(onOpen: (chatId) => _open(context, ref, chatId)),
           );
@@ -97,7 +103,12 @@ class MessengerHome extends ConsumerWidget {
                         title: 'Чаты',
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: [_AccountButton(), _LockMark()],
+                          children: [
+                            _AddPersonButton(),
+                            ThemeToggle(),
+                            _AccountButton(),
+                            _LockMark(),
+                          ],
                         ),
                       ),
                       const Divider(height: 1),
@@ -150,6 +161,7 @@ class ConversationScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(peer?.name ?? 'Собеседник'),
         actions: [
+          const ThemeToggle(),
           IconButton(
             tooltip: 'Число безопасности',
             onPressed: () {
@@ -237,6 +249,29 @@ class _StartupTasksState extends ConsumerState<StartupTasks> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+class _AddPersonButton extends StatelessWidget {
+  const _AddPersonButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: IconButton.filled(
+        key: const Key('add-person'),
+        tooltip: 'Добавить',
+        onPressed: () {},
+        style: IconButton.styleFrom(
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+          minimumSize: const Size(40, 40),
+        ),
+        icon: const Icon(Icons.add),
+      ),
+    );
+  }
 }
 
 class _AccountButton extends ConsumerWidget {

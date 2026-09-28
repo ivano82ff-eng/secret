@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../session/notices.dart';
+import '../theme.dart';
 
 class InboundBanner extends StatelessWidget {
   const InboundBanner({
@@ -16,13 +17,14 @@ class InboundBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = SecretPalette.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Material(
         key: const Key('inbound-banner'),
-        color: const Color(0xFFFFFCF7),
+        color: palette.field,
         elevation: 1,
-        shadowColor: const Color(0x331B3A31),
+        shadowColor: palette.quiet.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
@@ -31,7 +33,10 @@ class InboundBanner extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
             child: Row(
               children: [
-                const Icon(Icons.notifications_none, color: Color(0xFF1B3A31)),
+                Icon(
+                  Icons.notifications_none,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

@@ -18,8 +18,13 @@ import 'package:secret/models/payload_markers.dart';
 import 'package:secret/providers.dart';
 import 'package:secret/transport/mock_messenger_transport.dart';
 import 'package:secret/ui/wall_smiley.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('chat list shows the empty state', (tester) async {
     await _pumpApp(tester);
     expect(find.byKey(const Key('empty-chats')), findsOneWidget);
@@ -90,7 +95,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('О стену'), findsOneWidget);
+    expect(find.byKey(const Key('wall-smiley')), findsOneWidget);
     expect(find.text('😀'), findsWidgets);
     await tester.tap(find.text('😀').first);
     await tester.pump();
@@ -198,6 +203,40 @@ void main() {
     await tester.tap(find.byKey(const Key('send')));
     await _flush(tester);
     expect(find.text('Текст жив'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('add button stays on the list and both themes build', (
+    tester,
+  ) async {
+    await _pumpApp(tester);
+    expect(find.byKey(const Key('add-person')), findsOneWidget);
+    expect(
+      Theme.of(tester.element(find.text('Чаты'))).brightness,
+      Brightness.light,
+    );
+
+    await tester.tap(find.byKey(const Key('add-person')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('empty-chats')), findsOneWidget);
+    expect(find.text('Чаты'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+
+    await tester.tap(find.byKey(const Key('theme-switch')));
+    await _flush(tester);
+    expect(
+      Theme.of(tester.element(find.text('Чаты'))).brightness,
+      Brightness.dark,
+    );
+    expect(find.byKey(const Key('empty-chats')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('theme-switch')));
+    await _flush(tester);
+    expect(
+      Theme.of(tester.element(find.text('Чаты'))).brightness,
+      Brightness.light,
+    );
     await _unmount(tester);
   });
 

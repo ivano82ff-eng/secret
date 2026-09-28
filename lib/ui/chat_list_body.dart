@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../directory/peers.dart';
 import '../providers.dart';
+import '../theme.dart';
 import 'status_panel.dart';
 import 'time_format.dart';
 
@@ -46,10 +47,11 @@ class ChatListBody extends ConsumerWidget {
           itemBuilder: (context, index) {
             final chat = items[index];
             final selected = chat.chatId == selectedChatId;
+            final palette = SecretPalette.of(context);
             return ListTile(
               key: Key('chat-${chat.chatId}'),
               selected: selected,
-              selectedTileColor: const Color(0xFFE7EFEA),
+              selectedTileColor: palette.outgoing.withValues(alpha: 0.55),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 6,
@@ -75,7 +77,7 @@ class ChatListBody extends ConsumerWidget {
               ),
               trailing: Text(
                 formatChatTime(chat.updatedAt),
-                style: Theme.of(context).textTheme.labelMedium,
+                style: TextStyle(color: palette.quiet, fontSize: 12),
               ),
               onTap: () => onOpen(chat.chatId),
             );

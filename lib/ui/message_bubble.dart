@@ -5,8 +5,8 @@ import '../directory/peers.dart';
 import '../models/display_message.dart';
 import '../models/envelope.dart';
 import '../providers.dart';
+import '../theme.dart';
 import 'time_format.dart';
-import 'theme_colors.dart';
 import 'wall_smiley.dart';
 
 class MessageBubble extends ConsumerWidget {
@@ -22,8 +22,9 @@ class MessageBubble extends ConsumerWidget {
       EnvelopeStatus.sent => 'отправлено',
       EnvelopeStatus.received => '',
     };
-    final ink = outgoing ? Colors.white : const Color(0xFF1C1B19);
-    final meta = outgoing ? const Color(0xFFD5E3DC) : const Color(0xFF6E6A62);
+    final palette = SecretPalette.of(context);
+    final ink = outgoing ? palette.outgoingInk : palette.incomingInk;
+    final meta = outgoing ? palette.outgoingMeta : palette.incomingMeta;
     return Align(
       alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -32,11 +33,17 @@ class MessageBubble extends ConsumerWidget {
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
           decoration: BoxDecoration(
-            color: outgoing ? outgoingBubble : incomingBubble,
+            color: outgoing ? palette.outgoing : palette.incoming,
             borderRadius: BorderRadius.circular(18),
-            border: outgoing
-                ? null
-                : Border.all(color: const Color(0xFFE4DDD2)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(
+                  alpha: palette.night ? 0.28 : 0.06,
+                ),
+                blurRadius: 10,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -51,7 +58,7 @@ class MessageBubble extends ConsumerWidget {
                   formatChatTime(message.envelope.createdAt),
                   if (outgoing && status.isNotEmpty) status,
                 ].join(' · '),
-                style: TextStyle(color: meta, fontSize: 11),
+                style: TextStyle(color: meta, fontSize: 12, height: 1.2),
               ),
             ],
           ),
@@ -67,7 +74,7 @@ class MessageBubble extends ConsumerWidget {
       MockKind.voice => _VoiceBody(message: message, ink: ink),
       MockKind.text => Text(
         message.mockDisplayText,
-        style: TextStyle(color: ink, height: 1.35, fontSize: 16),
+        style: TextStyle(color: ink, height: 1.35, fontSize: 20),
       ),
     };
   }
@@ -96,7 +103,11 @@ class _FileBody extends StatelessWidget {
                 key: const Key('file-bubble'),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: ink, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: ink,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 17,
+                ),
               ),
               Text(
                 formatByteSize(message.mockSizeBytes ?? 0),
@@ -148,7 +159,11 @@ class _VoiceBody extends ConsumerWidget {
               Text(
                 'Голосовое',
                 key: const Key('voice-bubble'),
-                style: TextStyle(color: ink, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: ink,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 17,
+                ),
               ),
               Text(
                 formatVoiceDuration(message.mockDuration ?? Duration.zero),

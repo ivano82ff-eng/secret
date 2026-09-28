@@ -13,10 +13,13 @@ class SecretApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
     return MaterialApp(
       title: 'Секрет',
       debugShowCheckedModeBanner: false,
       theme: secretTheme(),
+      darkTheme: secretDarkTheme(),
+      themeMode: mode,
       locale: const Locale('ru'),
       supportedLocales: const [Locale('ru')],
       localizationsDelegates: const [
