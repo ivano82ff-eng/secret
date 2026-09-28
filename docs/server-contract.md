@@ -17,6 +17,20 @@ Other failures use 400 with `{ "error": "..." }`. No stack traces.
 
 Base URL in examples: `https://api.example`.
 
+## userId
+
+`userId` is the address. `deviceId` is not.
+
+The id is six digits and one Latin letter, written as three digits, a space, the letter, a space, three digits:
+
+```
+456 N 634
+```
+
+Canonical form matches `^[0-9]{3} [A-Z] [0-9]{3}$`. The letter is uppercase `A`–`Z`. `POST /v1/devices` assigns a new id in this form and returns it as `userId`. Reinstalling with the same identity public key still creates a new `userId`. The server stores and returns only the canonical form. On input, trim the string, collapse spaces, and uppercase the letter before lookup. A recipient id that is not this shape is `400`.
+
+In `GET /v1/keys/bundle/{userId}` the spaces are percent-encoded (`456%20N%20634`). JWT `sub` is this same `userId`.
+
 ## POST /v1/devices
 
 Register this device. The identity public key is the X25519 public key the client generated. `signedPreKey` and `oneTimePreKeys` are stored as opaque records. The current client sends placeholders until libsignal fills them; the server must not interpret the bytes.
@@ -43,9 +57,9 @@ Response `201`:
 
 ```json
 {
-  "userId": "user_8f3a",
+  "userId": "456 N 634",
   "deviceId": "device_1",
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzhmM2EifQ.sig",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NTYgTiA2MzQifQ.sig",
   "refreshToken": "rfr_7b1c9e"
 }
 ```
@@ -64,7 +78,7 @@ Response `200`:
 
 ```json
 {
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzhmM2EiLCJ2IjoxfQ.sig",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NTYgTiA2MzQiLCJ2IjoxfQ.sig",
   "refreshToken": "rfr_a02d44"
 }
 ```
@@ -105,7 +119,7 @@ Response `200`:
 
 ```json
 {
-  "userId": "user_bob",
+  "userId": "781 K 209",
   "deviceId": "device_1",
   "registrationId": 1904,
   "identityPublicKey": "Ym9iLWlkZW50aXR5LXB1YmxpYy1rZXk=",
@@ -139,7 +153,7 @@ Auth, either:
 - the first text frame, and no other frame before it:
 
 ```json
-{ "type": "auth", "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzhmM2EifQ.sig" }
+{ "type": "auth", "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NTYgTiA2MzQifQ.sig" }
 ```
 
 If auth fails, close the socket. A `401` on the upgrade is correct when the header is present and bad. For a bad first frame, send one error and close:
@@ -154,7 +168,7 @@ If auth fails, close the socket. A `401` on the upgrade is correct when the head
 {
   "type": "envelope",
   "id": "env_01j8",
-  "recipientUserId": "user_bob",
+  "recipientUserId": "781 K 209",
   "ciphertext": "AQJDZmFrZS1jaXBoZXJ0ZXh0",
   "sentAt": "2026-09-27T18:04:11.000Z"
 }
@@ -168,8 +182,8 @@ The server appends the authenticated sender and forwards this delivery frame to 
 {
   "type": "envelope",
   "id": "env_01j8",
-  "senderUserId": "user_8f3a",
-  "recipientUserId": "user_bob",
+  "senderUserId": "456 N 634",
+  "recipientUserId": "781 K 209",
   "ciphertext": "AQJDZmFrZS1jaXBoZXJ0ZXh0",
   "sentAt": "2026-09-27T18:04:11.000Z"
 }
