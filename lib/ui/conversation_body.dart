@@ -230,7 +230,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
           ),
         Divider(height: 1, color: palette.quiet.withValues(alpha: 0.2)),
         Material(
-          color: palette.composer,
+          color: locked ? palette.lockedComposer : palette.composer,
           child: SafeArea(
             top: false,
             child: Padding(
@@ -285,12 +285,26 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
                           decoration: InputDecoration(
                             hintText: 'Написать сообщение',
                             filled: true,
-                            fillColor: palette.field,
+                            fillColor: locked
+                                ? palette.lockedField
+                                : palette.field,
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
+                            contentPadding: EdgeInsets.fromLTRB(
+                              16,
+                              12,
+                              locked ? 8 : 16,
+                              12,
                             ),
+                            suffixIcon: locked
+                                ? const IgnorePointer(child: LockFieldMark())
+                                : null,
+                            suffixIconConstraints: locked
+                                ? const BoxConstraints(
+                                    minWidth: 96,
+                                    maxWidth: 96,
+                                    minHeight: 36,
+                                  )
+                                : null,
                             border: const OutlineInputBorder(
                               borderRadius: BorderRadius.all(
                                 Radius.circular(24),

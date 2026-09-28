@@ -74,9 +74,7 @@ class ChatListBody extends ConsumerWidget {
                       Icons.lock,
                       key: Key('chat-lock-${chat.chatId}'),
                       size: 16,
-                      color: palette.night
-                          ? const Color(0xFF8EBBDD)
-                          : const Color(0xFF2F6FA8),
+                      color: palette.lockedInk,
                     ),
                     const SizedBox(width: 6),
                   ],

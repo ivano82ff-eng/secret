@@ -40,13 +40,26 @@ class SecretPalette extends ThemeExtension<SecretPalette> {
   Color get listSurface =>
       night ? const Color(0xFF070B10) : const Color(0xFFC3D0DC);
 
-  /// Cool row used only while extra encryption is on for that chat.
+  /// Bright row used only while extra encryption is on for that chat.
   Color extraRow({required bool selected}) {
     if (night) {
-      return selected ? const Color(0xFF243E5C) : const Color(0xFF1A3048);
+      return selected ? const Color(0xFF3B96DC) : const Color(0xFF2176B8);
     }
-    return selected ? const Color(0xFFB9D3EA) : const Color(0xFFC9DCEC);
+    return selected ? const Color(0xFF4EAEF5) : const Color(0xFF7EC8FF);
   }
+
+  /// Thread wash while extra encryption is on. Brighter than [wallpaperBase].
+  Color get lockedWallpaper =>
+      night ? const Color(0xFF1E5688) : const Color(0xFFB7E0FF);
+
+  Color get lockedComposer =>
+      night ? const Color(0xFF163E64) : const Color(0xFFD7EEFF);
+
+  Color get lockedField =>
+      night ? const Color(0xFF1A4E7C) : const Color(0xFFF3F9FF);
+
+  Color get lockedInk =>
+      night ? const Color(0xFFF4FAFF) : const Color(0xFF14558C);
 
   static SecretPalette of(BuildContext context) {
     return Theme.of(context).extension<SecretPalette>()!;
