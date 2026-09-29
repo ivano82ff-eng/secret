@@ -52,6 +52,12 @@ flutter build ios --no-codesign
 
 `flutter build apk` needs an Android SDK. `flutter build windows` needs a Windows host. `flutter build macos` and `flutter build ios` need a Mac with Xcode. On this machine `flutter build web` completed and wrote `build/web`. Linux was not compiled here: Ninja and the GTK 3 development libraries are not installed. The Android SDK is not installed, so the APK was not built. The Android, iOS, Linux, macOS, and Windows project folders are still in the tree.
 
+### Windows installer
+
+The same file is installed on both computers. GitHub Actions (`.github/workflows/windows-release.yml`) runs `flutter build windows --release` on `windows-latest`, zips the Release folder (`secret.exe` plus the dlls beside it), and builds one setup exe with Inno Setup. The default relay stays `http://85.113.129.93:3000`.
+
+Download [secret-setup-1.0.0.exe](https://github.com/ivano82ff-eng/secret/releases/download/windows-1.0.0/secret-setup-1.0.0.exe) from the [windows-1.0.0 release](https://github.com/ivano82ff-eng/secret/releases/tag/windows-1.0.0). The zip of that same Release folder is `secret-windows-1.0.0.zip` on the same release. Each install gets its own code (`456 N 634`). Add the other computer’s code with +.
+
 The first launch creates an X25519 identity, calls the mock `POST /v1/devices`, and shows the issued `userId` in the form `456 N 634` (three digits, a space, one uppercase letter A–Z, a space, three digits). That id is what you send to the other person. It is stored on the device, so the next launch of the same install shows the same code. A later launch with a stored key opens the chat list, and the code stays in the gear menu. There is no password.
 
 The chat list starts with three local conversations. Sending in a thread appends your envelope and a mock inbound reply. The list preview stays the neutral placeholder «Сообщение».

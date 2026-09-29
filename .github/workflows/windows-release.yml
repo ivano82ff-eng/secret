@@ -1,0 +1,128 @@
+name: Windows release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cursor/windows-release-8846
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Keep the public relay as the default
+        shell: pwsh
+        run: |
+          $config = Get-Content -Raw lib/config/api_config.dart
+          if ($config -notmatch "const defaultApiBase = 'http://85\.113\.129\.93:3000'") {
+            throw "defaultApiBase must stay http://85.113.129.93:3000"
+          }
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $line = Select-String -Path pubspec.yaml -Pattern '^version:\s*(\d+\.\d+\.\d+)' | Select-Object -First 1
+          if (-not $line) { throw "version: x.y.z not found in pubspec.yaml" }
+          $version = $line.Matches[0].Groups[1].Value
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "version=$version"
+
+      - name: Pack the Release folder
+        id: pack
+        shell: pwsh
+        run: |
+          $release = Get-ChildItem -Path build\windows -Recurse -Filter secret.exe |
+            Where-Object { $_.DirectoryName -match '\\Release$' } |
+            Select-Object -First 1
+          if (-not $release) { throw "secret.exe was not produced" }
+          $dir = $release.DirectoryName
+          foreach ($required in @("secret.exe", "flutter_windows.dll")) {
+            if (-not (Test-Path (Join-Path $dir $required))) {
+              throw "Release folder is missing $required"
+            }
+          }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $version = "${{ steps.version.outputs.version }}"
+          $zipName = "secret-windows-$version.zip"
+          $zipPath = Join-Path (Resolve-Path dist) $zipName
+          if (Test-Path $zipPath) { Remove-Item $zipPath }
+          tar -a -c -f $zipPath -C $dir .
+          if (-not (Test-Path $zipPath)) { throw "zip was not written" }
+          "release_dir=$dir" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "zip_name=$zipName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Packed $zipName from $dir"
+          Get-ChildItem $dir | Select-Object Name, Length
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe was not installed"
+          }
+          & $iscc /? | Select-Object -First 2
+
+      - name: Build setup exe
+        id: setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          $version = "${{ steps.version.outputs.version }}"
+          $releaseDir = "${{ steps.pack.outputs.release_dir }}"
+          & $iscc "/DReleaseDir=$releaseDir" "/DAppVersion=$version" "windows\packaging\secret.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit $LASTEXITCODE" }
+          $setupName = "secret-setup-$version.exe"
+          $setupPath = Join-Path (Resolve-Path dist) $setupName
+          if (-not (Test-Path $setupPath)) { throw "setup exe was not written: $setupPath" }
+          "setup_name=$setupName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "setup_path=$setupPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Built $setupName"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-${{ steps.version.outputs.version }}
+          name: Секрет ${{ steps.version.outputs.version }} для Windows
+          make_latest: true
+          fail_on_unmatched_files: true
+          body: |
+            Один установщик на оба компьютера. Адрес сервера уже внутри: http://85.113.129.93:3000.
+
+            Файл для установки: ${{ steps.setup.outputs.setup_name }}
+            Тот же файл ставится на оба ПК. У каждого компьютера будет свой код вида `456 N 634`. Этот код вводят на втором компьютере через +.
+
+            Архив папки Release (secret.exe и dll рядом): ${{ steps.pack.outputs.zip_name }}
+          files: |
+            ${{ steps.setup.outputs.setup_path }}
+            ${{ steps.pack.outputs.zip_path }}
