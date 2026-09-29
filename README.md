@@ -22,14 +22,16 @@ Open http://127.0.0.1:43123
 
 ### Live server
 
-To use [messenger-server](https://github.com/ivano82ff-eng/messenger-server) instead of the mock transport, pass one base URL (no trailing slash):
+The default relay is **http://85.113.129.93:3000** ([health](http://85.113.129.93:3000/health)). A normal `flutter run` talks to it via [messenger-server](https://github.com/ivano82ff-eng/messenger-server).
 
 ```bash
-# same Wi‑Fi as the relay
+flutter run
+
+# same machine / LAN as the relay
 flutter run --dart-define=API_BASE=http://192.168.0.99:3000
 
-# from the internet (health: http://85.113.129.93:3000/health)
-flutter run --dart-define=API_BASE=http://85.113.129.93:3000
+# offline demo (mock transport, no network)
+flutter run --dart-define=USE_MOCK=1
 ```
 
 The app registers or refreshes a session, opens `ws://…/v1/ws`, and sends ciphertext envelopes. Add a contact with **+** (canonical code `456 N 634`). Android allows cleartext HTTP via `usesCleartextTraffic` until TLS is enabled on the relay.
