@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import '../crypto/session_cipher.dart';
 import '../data/envelope_repository.dart';
-import '../directory/peers.dart';
 import '../models/envelope.dart';
 
 class DemoSeeder {
@@ -14,7 +13,7 @@ class DemoSeeder {
   final SessionCipher cipher;
   bool _done = false;
 
-  Future<void> seedIfEmpty() async {
+  Future<void> seedIfEmpty(String localUserId) async {
     if (_done) return;
     if (await repository.count() > 0) {
       _done = true;

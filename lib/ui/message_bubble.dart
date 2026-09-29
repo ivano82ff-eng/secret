@@ -17,7 +17,9 @@ class MessageBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final outgoing = message.envelope.sender == ref.watch(activeUserIdProvider);
+    final outgoing =
+        message.envelope.sender ==
+        ref.watch(sessionProvider).asData?.value.userId;
     final status = switch (message.envelope.status) {
       EnvelopeStatus.pending => 'отправка',
       EnvelopeStatus.sent => 'отправлено',
@@ -35,7 +37,12 @@ class MessageBubble extends ConsumerWidget {
           padding: EdgeInsets.fromLTRB(14, 10, outgoing ? 4 : 14, 8),
           decoration: BoxDecoration(
             color: outgoing ? palette.outgoing : palette.incoming,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
+              bottomLeft: Radius.circular(outgoing ? 16 : 4),
+              bottomRight: Radius.circular(outgoing ? 4 : 16),
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(

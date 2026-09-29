@@ -19,7 +19,7 @@ void main() {
     final envelope = Envelope(
       id: 'env_db',
       chatId: 'chat-ilya',
-      sender: 'user-local',
+      sender: '456 N 634',
       createdAt: DateTime.utc(2026, 9, 27, 15, 30),
       ciphertext: base64Encode(ciphertext),
       status: EnvelopeStatus.pending,

@@ -230,7 +230,7 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
           ),
         Divider(height: 1, color: palette.quiet.withValues(alpha: 0.2)),
         Material(
-          color: palette.composer,
+          color: locked ? palette.lockedComposer : palette.composer,
           child: SafeArea(
             top: false,
             child: Padding(
@@ -285,12 +285,26 @@ class _ConversationBodyState extends ConsumerState<ConversationBody> {
                           decoration: InputDecoration(
                             hintText: 'Написать сообщение',
                             filled: true,
-                            fillColor: palette.field,
+                            fillColor: locked
+                                ? palette.lockedField
+                                : palette.field,
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
+                            contentPadding: EdgeInsets.fromLTRB(
+                              16,
+                              12,
+                              locked ? 8 : 16,
+                              12,
                             ),
+                            suffixIcon: locked
+                                ? const IgnorePointer(child: LockFieldMark())
+                                : null,
+                            suffixIconConstraints: locked
+                                ? const BoxConstraints(
+                                    minWidth: 96,
+                                    maxWidth: 96,
+                                    minHeight: 36,
+                                  )
+                                : null,
                             border: const OutlineInputBorder(
                               borderRadius: BorderRadius.all(
                                 Radius.circular(24),
@@ -361,11 +375,20 @@ class _EmojiPanelState extends State<_EmojiPanel> {
   static const _tabHeight = 36.0;
 
   final _category = ValueNotifier<Category>(Category.SMILEYS);
+  var _gridOffset = 0.0;
 
   @override
   void dispose() {
     _category.dispose();
     super.dispose();
+  }
+
+  bool _onGridScroll(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    final next = notification.metrics.pixels;
+    if ((next - _gridOffset).abs() < 0.5) return false;
+    setState(() => _gridOffset = next);
+    return false;
   }
 
   @override
@@ -383,69 +406,74 @@ class _EmojiPanelState extends State<_EmojiPanel> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final cell = constraints.maxWidth / _columns;
-              return SizedBox(
-                height: pickerHeight,
-                child: Stack(
-                  children: [
-                    EmojiPicker(
-                      textEditingController: widget.controller,
-                      onCategoryChanged: (category) {
-                        if (!mounted || _category.value == category) return;
-                        _category.value = category;
-                      },
-                      config: Config(
-                        height: pickerHeight,
-                        checkPlatformCompatibility: false,
-                        emojiSet: _compactEmojiSet,
-                        emojiViewConfig: EmojiViewConfig(
-                          backgroundColor: palette.composer,
-                          columns: _columns,
-                          emojiSizeMax: 28,
-                          verticalSpacing: 0,
-                          horizontalSpacing: 0,
-                          gridPadding: EdgeInsets.zero,
-                          buttonMode: ButtonMode.NONE,
-                        ),
-                        categoryViewConfig: CategoryViewConfig(
-                          tabBarHeight: _tabHeight,
-                          initCategory: Category.SMILEYS,
-                          recentTabBehavior: RecentTabBehavior.NONE,
-                          backgroundColor: palette.composer,
-                          indicatorColor: scheme.primary,
-                          iconColor: palette.quiet,
-                          iconColorSelected: scheme.primary,
-                          backspaceColor: scheme.primary,
-                          dividerColor: palette.quiet.withValues(alpha: 0.2),
-                        ),
-                        bottomActionBarConfig: const BottomActionBarConfig(
-                          enabled: false,
+              return NotificationListener<ScrollNotification>(
+                onNotification: _onGridScroll,
+                child: SizedBox(
+                  height: pickerHeight,
+                  child: Stack(
+                    clipBehavior: Clip.hardEdge,
+                    children: [
+                      EmojiPicker(
+                        textEditingController: widget.controller,
+                        onCategoryChanged: (category) {
+                          if (!mounted || _category.value == category) return;
+                          _category.value = category;
+                        },
+                        config: Config(
+                          height: pickerHeight,
+                          checkPlatformCompatibility: false,
+                          emojiSet: _compactEmojiSet,
+                          emojiViewConfig: EmojiViewConfig(
+                            backgroundColor: palette.composer,
+                            columns: _columns,
+                            emojiSizeMax: 28,
+                            verticalSpacing: 0,
+                            horizontalSpacing: 0,
+                            gridPadding: EdgeInsets.zero,
+                            buttonMode: ButtonMode.NONE,
+                          ),
+                          categoryViewConfig: CategoryViewConfig(
+                            tabBarHeight: _tabHeight,
+                            initCategory: Category.SMILEYS,
+                            recentTabBehavior: RecentTabBehavior.NONE,
+                            backgroundColor: palette.composer,
+                            indicatorColor: scheme.primary,
+                            iconColor: palette.quiet,
+                            iconColorSelected: scheme.primary,
+                            backspaceColor: scheme.primary,
+                            dividerColor: palette.quiet.withValues(alpha: 0.2),
+                          ),
+                          bottomActionBarConfig: const BottomActionBarConfig(
+                            enabled: false,
+                          ),
                         ),
                       ),
-                    ),
-                    ValueListenableBuilder<Category>(
-                      valueListenable: _category,
-                      builder: (context, category, _) {
-                        if (category != Category.SMILEYS) {
-                          return const SizedBox.shrink();
-                        }
-                        return Align(
-                          alignment: Alignment.topLeft,
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: _tabHeight),
-                            child: SizedBox(
-                              width: cell,
-                              height: cell,
-                              child: _WallSmileyCell(
-                                extent: cell,
-                                color: palette.composer,
-                                onPressed: widget.onSmiley,
+                      ValueListenableBuilder<Category>(
+                        valueListenable: _category,
+                        builder: (context, category, _) {
+                          if (category != Category.SMILEYS) {
+                            return const SizedBox.shrink();
+                          }
+                          return Positioned(
+                            left: 0,
+                            top: _tabHeight,
+                            width: cell,
+                            height: cell,
+                            child: ClipRect(
+                              child: Transform.translate(
+                                offset: Offset(0, -_gridOffset),
+                                child: _WallSmileyCell(
+                                  extent: cell,
+                                  color: palette.composer,
+                                  onPressed: widget.onSmiley,
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               );
             },

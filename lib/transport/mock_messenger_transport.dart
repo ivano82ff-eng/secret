@@ -7,6 +7,7 @@ import '../crypto/session_cipher.dart';
 import '../directory/peers.dart';
 import '../models/envelope.dart';
 import '../models/server_models.dart';
+import '../session/user_id.dart';
 import 'messenger_transport.dart';
 
 /// In-process stand-in for the contract in `docs/server-contract.md`.
@@ -18,14 +19,27 @@ class MockMessengerTransport implements MessengerTransport {
     required this.cipher,
     this.replyDelay = const Duration(milliseconds: 280),
     this.remoteOneTimePreKeys = 5,
-  });
+    this.localUserId,
+    Random? random,
+  }) : _random = random ?? Random.secure();
 
   final SessionCipher cipher;
   final Duration replyDelay;
   int remoteOneTimePreKeys;
 
+  /// Canonical address for this install. A stored id is applied with
+  /// [holdUserId] before [registerDevice] so the next launch keeps it.
+  String? localUserId;
+
   final _events = StreamController<ServerEvent>.broadcast();
-  final _random = Random.secure();
+  final Random _random;
+
+  void holdUserId(String id) {
+    if (!userIdPattern.hasMatch(id)) {
+      throw ArgumentError.value(id, 'id', 'userId is not canonical');
+    }
+    localUserId = id;
+  }
 
   String? _accessToken;
   String? _refreshToken;
@@ -49,8 +63,13 @@ class MockMessengerTransport implements MessengerTransport {
     _accessToken = 'mock-access-$_tokenGeneration';
     _refreshToken = 'mock-refresh-$_tokenGeneration';
     remoteOneTimePreKeys += request.oneTimePreKeys.length;
+    localUserId ??= mintUserId(_random);
+    final issued = localUserId!;
+    if (!userIdPattern.hasMatch(issued)) {
+      throw StateError('userId is not canonical');
+    }
     return RegistrationResult(
-      userId: localUserId,
+      userId: issued,
       deviceId: 'device-local',
       accessToken: _accessToken!,
       refreshToken: _refreshToken!,
@@ -136,10 +155,14 @@ class MockMessengerTransport implements MessengerTransport {
       ciphertext: base64Encode(ciphertext),
       status: EnvelopeStatus.received,
     );
+    final self = localUserId;
+    if (self == null) {
+      throw StateError('registerDevice before send');
+    }
     _rejectPlaintextFields({
       'type': 'envelope',
       'id': inbound.id,
-      'recipientUserId': localUserId,
+      'recipientUserId': self,
       'ciphertext': inbound.ciphertext,
       'sentAt': inbound.createdAt.toIso8601String(),
     });

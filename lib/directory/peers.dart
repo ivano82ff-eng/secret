@@ -10,8 +10,6 @@ class Peer {
   String get initial => name.isEmpty ? '?' : name[0];
 }
 
-const localUserId = 'user-local';
-
 const peers = <Peer>[
   Peer(userId: 'user-marina', chatId: 'chat-marina', name: 'Марина Соколова'),
   Peer(userId: 'user-ilya', chatId: 'chat-ilya', name: 'Илья Петров'),

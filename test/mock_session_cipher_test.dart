@@ -22,7 +22,7 @@ void main() {
     final envelope = Envelope(
       id: 'env_1',
       chatId: 'chat-marina',
-      sender: 'user-local',
+      sender: '456 N 634',
       createdAt: DateTime.utc(2026, 9, 27, 12),
       ciphertext: base64Encode(ciphertext),
       status: EnvelopeStatus.sent,

@@ -16,6 +16,7 @@ import 'package:secret/media/attachment_picker.dart';
 import 'package:secret/media/voice_recorder.dart';
 import 'package:secret/models/payload_markers.dart';
 import 'package:secret/providers.dart';
+import 'package:secret/session/user_id.dart';
 import 'package:secret/transport/mock_messenger_transport.dart';
 import 'package:secret/ui/chat_wallpaper.dart';
 import 'package:secret/ui/wall_smiley.dart';
@@ -55,9 +56,11 @@ void main() {
 
   testWidgets('first launch shows a copyable user id', (tester) async {
     _mockClipboard(tester);
-    await _pumpApp(tester, storedIdentity: false);
+    final harness = await _pumpApp(tester, storedIdentity: false);
     expect(find.byKey(const Key('user-id-value')), findsOneWidget);
-    expect(find.text('user-local'), findsOneWidget);
+    final userId = _visibleUserId(tester);
+    expect(userId, matches(userIdPattern));
+    expect(await harness.userIds.read(), userId);
     expect(
       find.textContaining('Идентификатор устройства — не адрес'),
       findsOneWidget,
@@ -65,7 +68,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('copy-user-id')));
     await tester.pump();
-    expect(await _readClipboard(tester), 'user-local');
+    expect(await _readClipboard(tester), userId);
 
     await tester.tap(find.byKey(const Key('enter-chats')));
     await _flush(tester);
@@ -77,10 +80,32 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byKey(const Key('gear-user-id')), findsOneWidget);
-    expect(find.text('user-local'), findsWidgets);
+    expect(find.text(userId), findsWidgets);
     await tester.tap(find.byKey(const Key('gear-copy')));
     await tester.pump();
-    expect(await _readClipboard(tester), 'user-local');
+    expect(await _readClipboard(tester), userId);
+    await _unmount(tester);
+  });
+
+  testWidgets('the next launch of the same install shows the same user id', (
+    tester,
+  ) async {
+    final harness = await _pumpApp(tester, storedIdentity: false);
+    final userId = _visibleUserId(tester);
+    expect(userId, matches(userIdPattern));
+    await _unmount(tester);
+
+    await _pumpApp(tester, harness: harness);
+    expect(find.byKey(const Key('user-id-value')), findsNothing);
+    expect(find.text('Чаты'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settings-gear')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      tester.widget<Text>(find.byKey(const Key('gear-user-id'))).data,
+      userId,
+    );
+    expect(await harness.userIds.read(), userId);
     await _unmount(tester);
   });
 
@@ -381,7 +406,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byKey(const Key('theme-switch')), findsOneWidget);
     expect(find.byKey(const Key('gear-user-id')), findsOneWidget);
-    expect(find.text('user-local'), findsWidgets);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('gear-user-id'))).data,
+      matches(userIdPattern),
+    );
 
     await tester.tap(find.byKey(const Key('theme-switch')));
     await _flush(tester);
@@ -404,6 +432,29 @@ void main() {
     await _unmount(tester);
   });
 
+  testWidgets('settings switches the thread background', (tester) async {
+    await _pumpApp(tester, seedDemo: true, size: const Size(1100, 800));
+    await tester.tap(find.byKey(const Key('chat-chat-marina')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('wallpaper-facets')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('settings-gear')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byKey(const Key('wallpaper-switch')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Капли'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('wallpaper-choice-drops')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const Key('wallpaper-drops')), findsOneWidget);
+    expect(find.byKey(const Key('thread-wallpaper')), findsOneWidget);
+    await _unmount(tester);
+  });
+
   testWidgets('wall smiley hides when another emoji filter is active', (
     tester,
   ) async {
@@ -419,6 +470,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('wall-smiley')), findsNothing);
     expect(find.byIcon(Icons.pets), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('wall smiley scrolls away from the top-left corner', (
+    tester,
+  ) async {
+    await _pumpApp(tester);
+    await _openAlexey(tester);
+    await tester.tap(find.byKey(const Key('emoji-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final before = tester.getTopLeft(find.byKey(const Key('wall-smiley')));
+
+    final panel = tester.getRect(find.byKey(const Key('emoji-panel')));
+    await tester.dragFrom(panel.center, const Offset(0, -180));
+    await tester.pump();
+
+    final after = tester.getTopLeft(find.byKey(const Key('wall-smiley')));
+    expect(after.dy, lessThan(before.dy - 40));
     await _unmount(tester);
   });
 
@@ -475,6 +545,7 @@ void main() {
         seedDemoProvider.overrideWithValue(false),
         previewModeProvider.overrideWithValue(PreviewMode.normal),
         privateKeyVaultProvider.overrideWithValue(vault),
+        userIdStoreProvider.overrideWithValue(_MemoryUserIdStore()),
         transportProvider.overrideWithValue(
           MockMessengerTransport(
             cipher: const MockSessionCipher(),
@@ -508,10 +579,11 @@ void main() {
 }
 
 class _Harness {
-  _Harness(this.database, this.vault);
+  _Harness(this.database, this.vault, this.userIds);
 
   final AppDatabase database;
   final _MemoryVault vault;
+  final _MemoryUserIdStore userIds;
 }
 
 Future<_Harness> _pumpApp(
@@ -525,7 +597,12 @@ Future<_Harness> _pumpApp(
 }) async {
   await tester.binding.setSurfaceSize(size);
   final next =
-      harness ?? _Harness(AppDatabase(NativeDatabase.memory()), _MemoryVault());
+      harness ??
+      _Harness(
+        AppDatabase(NativeDatabase.memory()),
+        _MemoryVault(),
+        _MemoryUserIdStore(),
+      );
   if (harness == null) {
     addTearDown(next.database.close);
     if (storedIdentity) {
@@ -539,6 +616,7 @@ Future<_Harness> _pumpApp(
         seedDemoProvider.overrideWithValue(seedDemo),
         previewModeProvider.overrideWithValue(PreviewMode.normal),
         privateKeyVaultProvider.overrideWithValue(next.vault),
+        userIdStoreProvider.overrideWithValue(next.userIds),
         if (picker != null) attachmentPickerProvider.overrideWithValue(picker),
         if (recorder != null) voiceRecorderProvider.overrideWithValue(recorder),
         transportProvider.overrideWithValue(
@@ -553,6 +631,12 @@ Future<_Harness> _pumpApp(
   );
   await _flush(tester);
   return next;
+}
+
+String _visibleUserId(WidgetTester tester) {
+  return tester
+      .widget<SelectableText>(find.byKey(const Key('user-id-value')))
+      .data!;
 }
 
 Future<void> _openAlexey(WidgetTester tester) async {
@@ -612,6 +696,18 @@ Future<void> _flush(WidgetTester tester) async {
 Future<String> _identitySeed() async {
   final pair = await X25519().newKeyPair();
   return base64Encode(await pair.extractPrivateKeyBytes());
+}
+
+class _MemoryUserIdStore implements UserIdStore {
+  String? value;
+
+  @override
+  Future<String?> read() async => value;
+
+  @override
+  Future<void> write(String userId) async {
+    value = userId;
+  }
 }
 
 class _MemoryVault implements PrivateKeyVault {
