@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Release does not merge the debug/profile manifests, so the relay needs this here. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="secret"
         android:name="${applicationName}"
