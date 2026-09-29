@@ -32,7 +32,6 @@ import 'session/notices.dart';
 import 'transport/http_messenger_transport.dart';
 import 'transport/messenger_transport.dart';
 import 'transport/mock_messenger_transport.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 enum PreviewMode { normal, empty, loading, error, threadError, notify }
 
