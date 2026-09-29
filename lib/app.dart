@@ -40,20 +40,30 @@ class AuthGate extends ConsumerWidget {
     final intro = ref.watch(introVisibleProvider);
     final session = ref.watch(sessionProvider);
     if (intro.isLoading || session.isLoading) {
-      return const Scaffold(
+      final base = ref.watch(apiConfigProvider).baseUrl;
+      return Scaffold(
         body: StatusPanel(
           icon: Icons.lock_outline,
           title: 'Готовим идентификатор',
-          body: 'Создаём ключ устройства и регистрируем его локально.',
+          body: base.isEmpty
+              ? 'Создаём ключ устройства локально.'
+              : 'Создаём ключ и регистрируем устройство на $base',
         ),
       );
     }
     if (intro.hasError || session.hasError) {
+      final err = session.error ?? intro.error;
+      final detail = err == null ? '' : err.toString();
+      final base = ref.watch(apiConfigProvider).baseUrl;
       return Scaffold(
         body: StatusPanel(
           icon: Icons.error_outline,
           title: 'Не удалось получить идентификатор',
-          body: 'Ключ не сохранился. Повторите попытку. Пароль не нужен.',
+          body: detail.isNotEmpty
+              ? detail
+              : base.isEmpty
+              ? 'Ключ не сохранился. Повторите попытку. Пароль не нужен.'
+              : 'Нет ответа от $base. Проверьте сервер или запустите с USE_MOCK=1.',
           actionLabel: 'Повторить',
           onAction: () {
             ref.invalidate(identityProvider);

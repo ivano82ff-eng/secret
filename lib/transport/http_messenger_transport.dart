@@ -30,18 +30,35 @@ class HttpMessengerTransport implements MessengerTransport {
   StreamController<ServerEvent>? _events;
   final Map<String, Completer<void>> _ackWaiters = {};
 
+  static const _timeout = Duration(seconds: 12);
+
   Uri get _origin => Uri.parse(baseUrl);
 
   Uri _uri(String path) => _origin.replace(path: path);
+
+  Future<http.Response> _send(Future<http.Response> future) async {
+    try {
+      return await future.timeout(_timeout);
+    } on TimeoutException {
+      throw TransportException(
+        0,
+        'Сервер не отвечает: $baseUrl (таймаут ${_timeout.inSeconds} с)',
+      );
+    } on http.ClientException catch (e) {
+      throw TransportException(0, 'Нет связи с сервером: ${e.message}');
+    }
+  }
 
   @override
   Future<RegistrationResult> registerDevice(
     DeviceRegistrationRequest request,
   ) async {
-    final response = await _client.post(
-      _uri('/v1/devices'),
-      headers: _jsonHeaders(),
-      body: jsonEncode(request.toJson()),
+    final response = await _send(
+      _client.post(
+        _uri('/v1/devices'),
+        headers: _jsonHeaders(),
+        body: jsonEncode(request.toJson()),
+      ),
     );
     final body = _decodeBody(response);
     if (response.statusCode != 201) {
@@ -58,10 +75,12 @@ class HttpMessengerTransport implements MessengerTransport {
 
   @override
   Future<TokenPair> refreshSession({required String refreshToken}) async {
-    final response = await _client.post(
-      _uri('/v1/sessions/refresh'),
-      headers: _jsonHeaders(),
-      body: jsonEncode({'refreshToken': refreshToken}),
+    final response = await _send(
+      _client.post(
+        _uri('/v1/sessions/refresh'),
+        headers: _jsonHeaders(),
+        body: jsonEncode({'refreshToken': refreshToken}),
+      ),
     );
     final body = _decodeBody(response);
     if (response.statusCode != 200) {
@@ -76,12 +95,14 @@ class HttpMessengerTransport implements MessengerTransport {
 
   @override
   Future<void> replenishOneTimePreKeys(List<OneTimePreKey> keys) async {
-    final response = await _client.put(
-      _uri('/v1/keys/one-time'),
-      headers: _jsonHeaders(bearer: accessToken),
-      body: jsonEncode({
-        'oneTimePreKeys': keys.map((key) => key.toJson()).toList(),
-      }),
+    final response = await _send(
+      _client.put(
+        _uri('/v1/keys/one-time'),
+        headers: _jsonHeaders(bearer: accessToken),
+        body: jsonEncode({
+          'oneTimePreKeys': keys.map((key) => key.toJson()).toList(),
+        }),
+      ),
     );
     if (response.statusCode != 200) {
       final body = _decodeBody(response);
@@ -95,9 +116,11 @@ class HttpMessengerTransport implements MessengerTransport {
     if (canonical == null) {
       throw const TransportException(400, 'invalid userId');
     }
-    final response = await _client.get(
-      _uri('/v1/keys/bundle/${encodeUserIdPathSegment(canonical)}'),
-      headers: _jsonHeaders(bearer: accessToken),
+    final response = await _send(
+      _client.get(
+        _uri('/v1/keys/bundle/${encodeUserIdPathSegment(canonical)}'),
+        headers: _jsonHeaders(bearer: accessToken),
+      ),
     );
     final body = _decodeBody(response);
     if (response.statusCode != 200) {

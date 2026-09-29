@@ -127,5 +127,5 @@ class TransportException implements Exception {
   final String message;
 
   @override
-  String toString() => 'TransportException($statusCode)';
+  String toString() => message;
 }
