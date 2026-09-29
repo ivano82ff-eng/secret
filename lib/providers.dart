@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'crypto/identity_key_store.dart';
 import 'crypto/lock_stego.dart';
@@ -13,6 +14,9 @@ import 'crypto/private_key_vault.dart';
 import 'crypto/session_cipher.dart';
 import 'data/app_database.dart';
 import 'data/envelope_repository.dart';
+import 'config/api_config.dart';
+import 'data/contact_directory.dart';
+import 'data/session_store.dart';
 import 'demo/demo_seeder.dart';
 import 'directory/peers.dart';
 import 'media/attachment_picker.dart';
@@ -25,8 +29,10 @@ import 'models/server_models.dart';
 import 'notifications/neutral_notifications.dart';
 import 'session/local_media.dart';
 import 'session/notices.dart';
+import 'transport/http_messenger_transport.dart';
 import 'transport/messenger_transport.dart';
 import 'transport/mock_messenger_transport.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum PreviewMode { normal, empty, loading, error, threadError, notify }
 
@@ -60,7 +66,20 @@ final previewModeProvider = Provider<PreviewMode>((ref) {
   };
 });
 
-final seedDemoProvider = Provider<bool>((ref) => true);
+final apiConfigProvider = Provider<ApiConfig>(
+  (ref) => ApiConfig.fromEnvironment(),
+);
+
+final sessionStoreProvider = Provider<SessionStore>((ref) => SessionStore());
+
+final contactDirectoryProvider = FutureProvider<ContactDirectory>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  return ContactDirectory(prefs);
+});
+
+final seedDemoProvider = Provider<bool>(
+  (ref) => !ref.watch(apiConfigProvider).useRealServer,
+);
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase.defaults();
@@ -77,7 +96,13 @@ final sessionCipherProvider = Provider<SessionCipher>((ref) {
 });
 
 final transportProvider = Provider<MessengerTransport>((ref) {
-  return MockMessengerTransport(cipher: ref.watch(sessionCipherProvider));
+  final config = ref.watch(apiConfigProvider);
+  if (!config.useRealServer) {
+    return MockMessengerTransport(cipher: ref.watch(sessionCipherProvider));
+  }
+  final http = HttpMessengerTransport(baseUrl: config.baseUrl);
+  ref.onDispose(http.close);
+  return http;
 });
 
 final privateKeyVaultProvider = Provider<PrivateKeyVault>((ref) {
@@ -97,14 +122,59 @@ final identityProvider = FutureProvider<IdentityLoad>((ref) async {
 final sessionProvider = FutureProvider<RegistrationResult>((ref) async {
   final identity = await ref.watch(identityProvider.future);
   final transport = ref.watch(transportProvider);
-  return transport.registerDevice(_stubRegistration(identity.info));
+  final config = ref.watch(apiConfigProvider);
+  if (!config.useRealServer) {
+    return transport.registerDevice(_stubRegistration(identity.info));
+  }
+
+  final store = ref.watch(sessionStoreProvider);
+  final saved = await store.read();
+  if (saved != null) {
+    try {
+      final pair = await transport.refreshSession(refreshToken: saved.refreshToken);
+      final next = RegistrationResult(
+        userId: saved.userId,
+        deviceId: saved.deviceId,
+        accessToken: pair.accessToken,
+        refreshToken: pair.refreshToken,
+      );
+      await store.write(next);
+      if (transport is HttpMessengerTransport) {
+        transport.accessToken = next.accessToken;
+      }
+      return next;
+    } on TransportException {
+      await store.clear();
+    }
+  }
+
+  final registered = await transport.registerDevice(
+    _stubRegistration(identity.info),
+  );
+  await store.write(registered);
+  return registered;
+});
+
+final activeUserIdProvider = Provider<String>((ref) {
+  if (!ref.watch(apiConfigProvider).useRealServer) {
+    return localUserId;
+  }
+  return ref.watch(sessionProvider).maybeWhen(
+        data: (session) => session.userId,
+        orElse: () => localUserId,
+      );
 });
 
 class IntroVisible extends AsyncNotifier<bool> {
   @override
   Future<bool> build() async {
     final identity = await ref.watch(identityProvider.future);
-    return identity.freshlyCreated;
+    if (!identity.freshlyCreated) return false;
+    if (ref.watch(apiConfigProvider).useRealServer) {
+      final saved = await ref.watch(sessionStoreProvider).read();
+      if (saved != null) return false;
+    }
+    return true;
   }
 
   void dismiss() => state = const AsyncData(false);
@@ -182,10 +252,27 @@ final extraEncryptionProvider = NotifierProvider<ExtraEncryption, Set<String>>(
   ExtraEncryption.new,
 );
 
-String displayTitle(String chatId, Map<String, String> names) {
+final contactNamesProvider = Provider<Map<String, String>>((ref) {
+  final directory = ref.watch(contactDirectoryProvider);
+  return directory.maybeWhen(
+    data: (store) => {
+      for (final contact in store.readAll())
+        contact.userId: contact.displayName,
+    },
+    orElse: () => const {},
+  );
+});
+
+String displayTitle(
+  String chatId,
+  Map<String, String> names, {
+  Map<String, String> contactNames = const {},
+}) {
   final override = names[chatId];
   if (override != null && override.isNotEmpty) return override;
-  return peerByChatIdOrNull(chatId)?.name ?? 'Собеседник';
+  final contact = contactNames[chatId];
+  if (contact != null && contact.isNotEmpty) return contact;
+  return peerByChatIdOrNull(chatId)?.name ?? chatId;
 }
 
 final selectedChatProvider = NotifierProvider<SelectedChat, String?>(
@@ -211,7 +298,18 @@ class ChatListNotifier extends AsyncNotifier<List<ChatSummary>> {
     if (ref.watch(seedDemoProvider)) {
       await ref.read(demoSeederProvider).seedIfEmpty();
     }
-    return summarize(await repository.listAll(), names);
+    final rows = await repository.listAll();
+    final contactNames = ref.watch(contactNamesProvider);
+    if (ref.watch(apiConfigProvider).useRealServer) {
+      final directory = await ref.watch(contactDirectoryProvider.future);
+      return _summarizeWithContacts(
+        rows,
+        names,
+        contactNames,
+        directory.readAll(),
+      );
+    }
+    return summarize(rows, names, contactNames: contactNames);
   }
 
   Future<void> deleteChat(String chatId) async {
@@ -229,10 +327,43 @@ final chatListProvider =
       ChatListNotifier.new,
     );
 
-List<ChatSummary> summarize(
+List<ChatSummary> _summarizeWithContacts(
   List<Envelope> envelopes,
   Map<String, String> names,
+  Map<String, String> contactNames,
+  List<StoredContact> contacts,
 ) {
+  final summaries = summarize(
+    envelopes,
+    names,
+    contactNames: contactNames,
+  );
+  final byChat = {for (final item in summaries) item.chatId: item};
+  for (final contact in contacts) {
+    byChat.putIfAbsent(
+      contact.userId,
+      () => ChatSummary(
+        chatId: contact.userId,
+        title: displayTitle(
+          contact.userId,
+          names,
+          contactNames: contactNames,
+        ),
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        preview: neutralPreview,
+      ),
+    );
+  }
+  final merged = byChat.values.toList()
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return merged;
+}
+
+List<ChatSummary> summarize(
+  List<Envelope> envelopes,
+  Map<String, String> names, {
+  Map<String, String> contactNames = const {},
+}) {
   final latest = <String, Envelope>{};
   for (final envelope in envelopes) {
     final current = latest[envelope.chatId];
@@ -245,7 +376,11 @@ List<ChatSummary> summarize(
     summaries.add(
       ChatSummary(
         chatId: envelope.chatId,
-        title: displayTitle(envelope.chatId, names),
+        title: displayTitle(
+          envelope.chatId,
+          names,
+          contactNames: contactNames,
+        ),
         updatedAt: envelope.createdAt,
         preview: neutralPreview,
       ),
@@ -316,7 +451,7 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     final outbound = Envelope(
       id: _newId(),
       chatId: chatId,
-      sender: localUserId,
+      sender: ref.read(activeUserIdProvider),
       createdAt: DateTime.now().toUtc(),
       ciphertext: base64Encode(sealed),
       status: EnvelopeStatus.pending,
@@ -372,7 +507,7 @@ class ThreadNotifier extends AsyncNotifier<List<DisplayMessage>> {
     final copy = Envelope(
       id: _newId(),
       chatId: targetChatId,
-      sender: localUserId,
+      sender: ref.read(activeUserIdProvider),
       createdAt: DateTime.now().toUtc(),
       ciphertext: base64Encode(sealed),
       status: EnvelopeStatus.sent,
@@ -507,7 +642,11 @@ class InboundHub extends Notifier<int> {
   void _consider(Envelope envelope) {
     if (envelope.sender == localUserId) return;
     if (envelope.chatId == ref.read(openThreadProvider)) return;
-    final name = displayTitle(envelope.chatId, ref.read(displayNamesProvider));
+    final name = displayTitle(
+      envelope.chatId,
+      ref.read(displayNamesProvider),
+      contactNames: ref.read(contactNamesProvider),
+    );
     ref
         .read(noticeProvider.notifier)
         .show(InboundNotice(chatId: envelope.chatId, senderName: name));

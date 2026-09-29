@@ -3,13 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/envelope.dart';
 import '../providers.dart';
 import '../session/notices.dart';
+import '../transport/http_messenger_transport.dart';
+import '../transport/messenger_transport.dart';
 import '../theme.dart';
 import 'chat_list_body.dart';
 import 'conversation_body.dart';
 import 'inbound_banner.dart';
 import 'safety_number_screen.dart';
+import 'add_contact_sheet.dart';
 import 'settings_menu.dart';
 
 const wideBreakpoint = 840.0;
@@ -41,7 +45,11 @@ class MessengerHome extends ConsumerWidget {
   }
 
   void _openSafety(BuildContext context, WidgetRef ref, String chatId) {
-    final name = displayTitle(chatId, ref.read(displayNamesProvider));
+    final name = displayTitle(
+      chatId,
+      ref.read(displayNamesProvider),
+      contactNames: ref.read(contactNamesProvider),
+    );
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => SafetyNumberScreen(peerName: name),
@@ -98,7 +106,10 @@ class MessengerHome extends ConsumerWidget {
             ),
           );
         }
-        final title = selected == null ? null : displayTitle(selected, names);
+        final contacts = ref.watch(contactNamesProvider);
+        final title = selected == null
+            ? null
+            : displayTitle(selected, names, contactNames: contacts);
         final threadLocked =
             selected != null &&
             ref.watch(extraEncryptionProvider).contains(selected);
@@ -174,7 +185,11 @@ class ConversationScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final title = displayTitle(chatId, ref.watch(displayNamesProvider));
+    final title = displayTitle(
+      chatId,
+      ref.watch(displayNamesProvider),
+      contactNames: ref.watch(contactNamesProvider),
+    );
     final locked = ref.watch(extraEncryptionProvider).contains(chatId);
     return Scaffold(
       appBar: AppBar(
@@ -273,6 +288,14 @@ class StartupTasks extends ConsumerStatefulWidget {
 }
 
 class _StartupTasksState extends ConsumerState<StartupTasks> {
+  StreamSubscription<ServerEvent>? _liveEvents;
+
+  @override
+  void dispose() {
+    unawaited(_liveEvents?.cancel());
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -280,25 +303,55 @@ class _StartupTasksState extends ConsumerState<StartupTasks> {
       if (!mounted) return;
       unawaited(ref.read(neutralNotificationsProvider).requestPermission());
       unawaited(ref.read(inboundHubProvider.notifier).maybeAnnouncePreview());
+      unawaited(_connectLiveMessenger());
     });
+  }
+
+  Future<void> _connectLiveMessenger() async {
+    if (!ref.read(apiConfigProvider).useRealServer) return;
+    try {
+      final session = await ref.read(sessionProvider.future);
+      final transport = ref.read(transportProvider);
+      if (transport is! HttpMessengerTransport) return;
+      await transport.connect(accessToken: session.accessToken);
+      await _liveEvents?.cancel();
+      _liveEvents = transport.events.listen((event) {
+        if (event is! EnvelopeDelivered) return;
+        unawaited(_onLiveEnvelope(event.envelope));
+      });
+    } on Object catch (error) {
+      debugPrint('Live messenger connect failed: $error');
+    }
+  }
+
+  Future<void> _onLiveEnvelope(Envelope envelope) async {
+    final directory = await ref.read(contactDirectoryProvider.future);
+    if (!directory.readAll().any((c) => c.userId == envelope.sender)) {
+      await directory.add(userId: envelope.sender);
+      ref.invalidate(contactDirectoryProvider);
+    }
+    await ref.read(inboundHubProvider.notifier).acceptInbound(envelope);
+    ref.invalidate(chatListProvider);
   }
 
   @override
   Widget build(BuildContext context) => widget.child;
 }
 
-class _AddPersonButton extends StatelessWidget {
+class _AddPersonButton extends ConsumerWidget {
   const _AddPersonButton();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: IconButton.filled(
         key: const Key('add-person'),
         tooltip: 'Добавить',
-        onPressed: () {},
+        onPressed: ref.watch(apiConfigProvider).useRealServer
+            ? () => showAddContactSheet(context, ref)
+            : null,
         style: IconButton.styleFrom(
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,

@@ -1,72 +1,255 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/web_socket_channel.dart';
+
 import '../models/envelope.dart';
 import '../models/server_models.dart';
+import 'canonical_user_id.dart';
 import 'messenger_transport.dart';
+import 'ws_channel_factory.dart';
 
-/// Sketch of the real client. Fill the method bodies against
-/// `docs/server-contract.md`. Do not change the interface.
+/// Live client for `docs/server-contract.md`.
 ///
 /// Auth on `/v1/ws` is `Authorization: Bearer` or a first
 /// `{type: auth, accessToken}` frame. Never put the token in the query string.
 class HttpMessengerTransport implements MessengerTransport {
-  HttpMessengerTransport({required this.baseUrl, this.accessToken});
+  HttpMessengerTransport({
+    required this.baseUrl,
+    this.accessToken,
+    http.Client? client,
+  }) : _client = client ?? http.Client();
 
   final String baseUrl;
   String? accessToken;
+  final http.Client _client;
+
+  WebSocketChannel? _channel;
+  StreamSubscription<Object?>? _wsSub;
+  StreamController<ServerEvent>? _events;
+  final Map<String, Completer<void>> _ackWaiters = {};
+
+  Uri get _origin => Uri.parse(baseUrl);
+
+  Uri _uri(String path) => _origin.replace(path: path);
 
   @override
-  Future<RegistrationResult> registerDevice(DeviceRegistrationRequest request) {
-    // TODO(server): POST $baseUrl/v1/devices with request.toJson().
-    // Store userId, deviceId, accessToken, refreshToken from the response.
-    throw UnimplementedError('POST /v1/devices ($baseUrl)');
+  Future<RegistrationResult> registerDevice(
+    DeviceRegistrationRequest request,
+  ) async {
+    final response = await _client.post(
+      _uri('/v1/devices'),
+      headers: _jsonHeaders(),
+      body: jsonEncode(request.toJson()),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 201) {
+      throw TransportException(response.statusCode, _errorMessage(body));
+    }
+    accessToken = body['accessToken'] as String?;
+    return RegistrationResult(
+      userId: body['userId'] as String,
+      deviceId: body['deviceId'] as String,
+      accessToken: body['accessToken'] as String,
+      refreshToken: body['refreshToken'] as String,
+    );
   }
 
   @override
-  Future<TokenPair> refreshSession({required String refreshToken}) {
-    // TODO(server): POST $baseUrl/v1/sessions/refresh
-    // Body: {"refreshToken": refreshToken}. Rotate both tokens.
-    // 401 when the refresh token is missing or already used.
-    throw UnimplementedError('POST /v1/sessions/refresh ($baseUrl)');
+  Future<TokenPair> refreshSession({required String refreshToken}) async {
+    final response = await _client.post(
+      _uri('/v1/sessions/refresh'),
+      headers: _jsonHeaders(),
+      body: jsonEncode({'refreshToken': refreshToken}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw TransportException(response.statusCode, _errorMessage(body));
+    }
+    accessToken = body['accessToken'] as String?;
+    return TokenPair(
+      accessToken: body['accessToken'] as String,
+      refreshToken: body['refreshToken'] as String,
+    );
   }
 
   @override
-  Future<void> replenishOneTimePreKeys(List<OneTimePreKey> keys) {
-    // TODO(server): PUT $baseUrl/v1/keys/one-time
-    // Body: {"oneTimePreKeys": keys.map((key) => key.toJson()).toList()}.
-    throw UnimplementedError('PUT /v1/keys/one-time ($baseUrl)');
+  Future<void> replenishOneTimePreKeys(List<OneTimePreKey> keys) async {
+    final response = await _client.put(
+      _uri('/v1/keys/one-time'),
+      headers: _jsonHeaders(bearer: accessToken),
+      body: jsonEncode({
+        'oneTimePreKeys': keys.map((key) => key.toJson()).toList(),
+      }),
+    );
+    if (response.statusCode != 200) {
+      final body = _decodeBody(response);
+      throw TransportException(response.statusCode, _errorMessage(body));
+    }
   }
 
   @override
-  Future<PreKeyBundle> fetchPreKeyBundle(String userId) {
-    // TODO(server): GET $baseUrl/v1/keys/bundle/$userId
-    // 409 when that user has no one-time prekeys left.
-    // Until safety numbers exist, the server can substitute this bundle.
-    throw UnimplementedError('GET /v1/keys/bundle/$userId ($baseUrl)');
+  Future<PreKeyBundle> fetchPreKeyBundle(String userId) async {
+    final canonical = canonicalizeUserId(userId);
+    if (canonical == null) {
+      throw const TransportException(400, 'invalid userId');
+    }
+    final response = await _client.get(
+      _uri('/v1/keys/bundle/${encodeUserIdPathSegment(canonical)}'),
+      headers: _jsonHeaders(bearer: accessToken),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw TransportException(response.statusCode, _errorMessage(body));
+    }
+    final otp = body['oneTimePreKey'] as Map<String, dynamic>?;
+    return PreKeyBundle(
+      userId: body['userId'] as String,
+      deviceId: body['deviceId'] as String,
+      registrationId: body['registrationId'] as int,
+      identityPublicKey: body['identityPublicKey'] as String,
+      signedPreKey: SignedPreKey(
+        keyId: (body['signedPreKey'] as Map<String, dynamic>)['keyId'] as int,
+        publicKey:
+            (body['signedPreKey'] as Map<String, dynamic>)['publicKey'] as String,
+        signature:
+            (body['signedPreKey'] as Map<String, dynamic>)['signature'] as String,
+      ),
+      oneTimePreKey: otp == null
+          ? null
+          : OneTimePreKey(
+              keyId: otp['keyId'] as int,
+              publicKey: otp['publicKey'] as String,
+            ),
+    );
   }
 
   @override
-  Future<void> connect({required String accessToken}) {
-    // TODO(server): WebSocket $baseUrl/v1/ws
-    // Header: Authorization: Bearer $accessToken
-    // or first frame {"type":"auth","accessToken": accessToken}.
+  Future<void> connect({required String accessToken}) async {
+    await close();
     this.accessToken = accessToken;
-    throw UnimplementedError('WebSocket /v1/ws ($baseUrl)');
+    _events = StreamController<ServerEvent>.broadcast();
+
+    final wsScheme = _origin.scheme == 'https' ? 'wss' : 'ws';
+    final wsUri = _origin.replace(scheme: wsScheme, path: '/v1/ws', query: '');
+
+    _channel = await openAuthenticatedWebSocket(wsUri, accessToken);
+    _wsSub = _channel!.stream.listen(
+      _onWsData,
+      onError: (_) => _events?.addError(StateError('websocket error')),
+      onDone: () {},
+    );
+  }
+
+  void _onWsData(Object? data) {
+    Map<String, dynamic> msg;
+    try {
+      msg = jsonDecode(data as String) as Map<String, dynamic>;
+    } on Object {
+      return;
+    }
+    switch (msg['type']) {
+      case 'envelope':
+        final sender = msg['senderUserId'] as String? ?? '';
+        final id = msg['id'] as String? ?? '';
+        final ciphertext = msg['ciphertext'] as String? ?? '';
+        final sentAtRaw = msg['sentAt'] as String?;
+        if (id.isEmpty || ciphertext.isEmpty || sentAtRaw == null) return;
+        final sentAt = DateTime.parse(sentAtRaw).toUtc();
+        _events?.add(
+          EnvelopeDelivered(
+            Envelope(
+              id: id,
+              chatId: sender,
+              sender: sender,
+              createdAt: sentAt,
+              ciphertext: ciphertext,
+              status: EnvelopeStatus.received,
+            ),
+          ),
+        );
+      case 'ack':
+        final id = msg['id'] as String?;
+        if (id != null) _ackWaiters.remove(id)?.complete();
+      case 'error':
+        break;
+      default:
+        break;
+    }
   }
 
   @override
-  Future<Envelope?> send(Envelope outbound) {
-    // TODO(server): send {"type":"envelope", id, recipientUserId, ciphertext, sentAt}
-    // Wait for {"type":"ack", id}. Return null; inbound envelopes arrive on [events].
-    throw UnimplementedError('ws envelope ${outbound.id} ($baseUrl)');
+  Future<Envelope?> send(Envelope outbound) async {
+    final channel = _channel;
+    if (channel == null) {
+      throw StateError('WebSocket is not connected');
+    }
+    final recipient = canonicalizeUserId(outbound.chatId);
+    if (recipient == null) {
+      throw const TransportException(400, 'invalid recipientUserId');
+    }
+
+    final wire = WireEnvelope(
+      id: outbound.id,
+      recipientUserId: recipient,
+      ciphertext: outbound.ciphertext,
+      sentAt: outbound.createdAt,
+    );
+
+    final ack = Completer<void>();
+    _ackWaiters[outbound.id] = ack;
+    channel.sink.add(jsonEncode(wire.toJson()));
+
+    try {
+      await ack.future.timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      _ackWaiters.remove(outbound.id);
+      throw StateError('ack timeout for ${outbound.id}');
+    }
+    return null;
   }
 
   @override
   Stream<ServerEvent> get events {
-    // TODO(server): decode envelope and ack frames. No plaintext, no keys.
-    throw UnimplementedError('ws events ($baseUrl)');
+    final stream = _events?.stream;
+    if (stream == null) {
+      throw StateError('WebSocket is not connected');
+    }
+    return stream;
   }
 
   @override
   Future<void> close() async {
-    // TODO(server): close the websocket when the HTTP client is wired up.
+    await _wsSub?.cancel();
+    _wsSub = null;
+    await _channel?.sink.close();
+    _channel = null;
+    await _events?.close();
+    _events = null;
+    for (final waiter in _ackWaiters.values) {
+      if (!waiter.isCompleted) waiter.completeError(StateError('closed'));
+    }
+    _ackWaiters.clear();
+  }
+
+  Map<String, String> _jsonHeaders({String? bearer}) {
+    final headers = {'Content-Type': 'application/json'};
+    final token = bearer ?? accessToken;
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
+
+  Map<String, dynamic> _decodeBody(http.Response response) {
+    if (response.body.isEmpty) return {};
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  String _errorMessage(Map<String, dynamic> body) {
+    final err = body['error'];
+    if (err is String && err.isNotEmpty) return err;
+    return 'request failed';
   }
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../directory/peers.dart';
 import '../models/display_message.dart';
 import '../models/envelope.dart';
 import '../providers.dart';
@@ -18,7 +17,7 @@ class MessageBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final outgoing = message.envelope.sender == localUserId;
+    final outgoing = message.envelope.sender == ref.watch(activeUserIdProvider);
     final status = switch (message.envelope.status) {
       EnvelopeStatus.pending => 'отправка',
       EnvelopeStatus.sent => 'отправлено',
